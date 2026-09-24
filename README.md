@@ -75,4 +75,4 @@ gh skill publish             # create a release
 
 - Docs: https://dezerv.github.io/portfolio-tracker-sdk-docs/
 - Issues: https://github.com/dezerv/Skills/issues
-- Team: Dezerv Platform Engineering
+- Team: Dezerv Engineering
