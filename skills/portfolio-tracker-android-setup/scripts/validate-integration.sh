@@ -60,11 +60,11 @@ fi
 
 # 5. Warmup in Application class only
 echo "[5/8] SDK warmup placement"
-INIT_COUNT=$(grep -rn "DezervSDK.initialize" --include="*.kt" --include="*.java" . 2>/dev/null | wc -l | tr -d ' ')
+INIT_COUNT=$(grep -rn "DezervSDK.initialize" --include="*.kt" --include="*.java" . 2>/dev/null | grep -v '^\s*//' | grep -v '^\s*\*' | grep -v '/build/' | wc -l | tr -d ' ')
 if [ "$INIT_COUNT" -eq 0 ]; then
   warn "DezervSDK.initialize not found — warmup is recommended"
 elif [ "$INIT_COUNT" -eq 1 ]; then
-  INIT_FILE=$(grep -rl "DezervSDK.initialize" --include="*.kt" --include="*.java" . 2>/dev/null | head -1)
+  INIT_FILE=$(grep -rl "DezervSDK.initialize" --include="*.kt" --include="*.java" . 2>/dev/null | grep -v '/build/' | head -1)
   if [ -n "$APP_CLASS" ] && [ "$INIT_FILE" = "$APP_CLASS" ]; then
     pass "Warmup called once, in the Application class ($INIT_FILE)"
   else

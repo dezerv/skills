@@ -40,11 +40,11 @@ fi
 
 # 3. Warmup in entry point only
 echo "[3/7] SDK warmup placement"
-INIT_COUNT=$(grep -rn "DezervSDK.shared.initialize" --include="*.swift" . 2>/dev/null | wc -l | tr -d ' ')
+INIT_COUNT=$(grep -rn "DezervSDK.shared.initialize" --include="*.swift" . 2>/dev/null | grep -v '^\s*//' | grep -v '\.build/' | wc -l | tr -d ' ')
 if [ "$INIT_COUNT" -eq 0 ]; then
   warn "DezervSDK.shared.initialize not found — warmup is recommended"
 elif [ "$INIT_COUNT" -eq 1 ]; then
-  INIT_FILE=$(grep -rl "DezervSDK.shared.initialize" --include="*.swift" . 2>/dev/null | head -1)
+  INIT_FILE=$(grep -rl "DezervSDK.shared.initialize" --include="*.swift" . 2>/dev/null | grep -v '\.build/' | head -1)
   if [ -n "$ENTRY_FILE" ] && [ "$INIT_FILE" = "$ENTRY_FILE" ]; then
     pass "Warmup called once, in the entry point ($INIT_FILE)"
   else
