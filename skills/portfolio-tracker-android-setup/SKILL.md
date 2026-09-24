@@ -250,6 +250,13 @@ Create a new layout file (e.g. `activity_portfolio.xml`) with the SDK view as th
 
 Read the hosting Activity file. Then modify it to add the SDK setup. Read `references/activity-template.kt` for the full reference implementation with event handling.
 
+**IMPORTANT — the generated code must include:**
+- All inline comments from the template explaining what each field/event does.
+- All optional `partnerUserMeta` fields as commented-out lines (phone, pan, deeplink, sdkMetrics, partner_section_name, partner_cta_copy, partner_cta_position, partner_medium, partner_keywords). Partners need to see what's available.
+- `// TODO:` markers on every line the partner must customize (auth token, session ID, partner ID, analytics forwarding, deeplink handling). These appear in Android Studio's TODO tool window.
+
+Do not strip comments, optional fields, or TODOs to "clean up" the code.
+
 Key requirements:
 
 1. Add SDK imports alongside existing imports.

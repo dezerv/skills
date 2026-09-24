@@ -13,6 +13,8 @@ description: >
 
 Integrate the Dezerv Portfolio Tracker SDK into the **partner app** (not the Skills or docs repos). Follow steps in order. After each step, verify before continuing.
 
+**Identifying an iOS project:** If the project root has a `Package.swift`, `*.xcodeproj`, or `*.xcworkspace`, it is an iOS/macOS project — even if it contains Rust, C, or other native dependencies as local packages. Do not ask the user to confirm the platform; proceed with the iOS setup.
+
 Canonical docs (prefer these if anything conflicts):
 - https://dezerv.github.io/portfolio-tracker-sdk-docs/current/ios/installation
 - https://dezerv.github.io/portfolio-tracker-sdk-docs/current/ios/usage
@@ -197,6 +199,14 @@ Read the entry-point file found in Step 1c. Add the warmup call to the **existin
 ## Step 5: Create the SDK presentation view
 
 Create a new SwiftUI View file that handles Builder configuration and presents `DezervSDKView`. Place it following the project's file conventions (found in Step 1e). Read `references/sdk-view-template.swift` for the full reference implementation with event handling.
+
+**IMPORTANT — the generated code must include:**
+- All inline comments from the template explaining what each field/event does.
+- All optional `partnerUserMeta` fields as commented-out lines (phone, pan, deeplink, sdkMetrics, partner_section_name, partner_cta_copy, partner_cta_position, partner_medium, partner_keywords). Partners need to see what's available.
+- `// TODO:` markers on every line the partner must customize (auth token, session ID, partner ID, analytics forwarding, deeplink handling). These appear in Xcode's task navigator.
+- Wrap the entire file in `#if canImport(PortfolioTrackerSDK)` / `#endif` — prevents build errors if the package hasn't resolved yet.
+
+Do not strip comments, optional fields, or TODOs to "clean up" the code.
 
 Key requirements for the view:
 

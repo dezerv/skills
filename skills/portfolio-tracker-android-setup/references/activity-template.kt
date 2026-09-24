@@ -103,9 +103,8 @@ class PortfolioActivity : AppCompatActivity() {
 
         // =========================================================================
         // 1. Auth token — MUST come from the partner backend, never hardcoded
-        // Replace this placeholder with your backend's /auth/token response
         // =========================================================================
-        val authToken = "PARTNER_AUTH_TOKEN"
+        val authToken = "PARTNER_AUTH_TOKEN" // TODO: Replace with your backend's /auth/token response
 
         // =========================================================================
         // 2. User metadata — personalization + session + attribution fields
@@ -113,9 +112,9 @@ class PortfolioActivity : AppCompatActivity() {
         // =========================================================================
         val userMeta = JSONObject().apply {
             // --- Session / analytics (required) ---
-            put("session_id", "REPLACE_SESSION_ID")        // Unique session identifier
+            put("session_id", "REPLACE_SESSION_ID")        // TODO: Replace with unique session ID
             put("schema_version", "2.0")                    // Always send "2.0"
-            put("partner", "REPLACE_PARTNER_ID")            // Partner identifier (e.g. "moneycontrol")
+            put("partner", "REPLACE_PARTNER_ID")            // TODO: Replace with your partner ID (e.g. "moneycontrol")
 
             // --- Personalization (required) ---
             // partner_category: stock | mutual_fund | index | commodity | ipo | news | homepage | comms | portfolio
@@ -225,15 +224,16 @@ class PortfolioActivity : AppCompatActivity() {
 
                 DezervSDKEvent.onDeeplink -> {
                     // User tapped a deeplink inside the SDK
-                    // ACTION REQUIRED: navigate to this link in your app
                     val link = payload?.optString("link")
                     Log.d("DezervSDK", "Deeplink: $link")
+                    // TODO: Navigate to this deeplink in your app
                 }
 
                 DezervSDKEvent.analytics -> {
-                    // Forward to your analytics service (Firebase, Mixpanel, etc.)
+                    // Forward to your analytics service
                     val eventName = payload?.optString("eventName") ?: ""
                     Log.d("DezervSDK", "Analytics: $eventName")
+                    // TODO: Forward to your analytics (e.g. Firebase, Mixpanel)
                 }
 
                 DezervSDKEvent.themeChange -> {
@@ -269,7 +269,7 @@ fun handleUserLogout() {
     DezervSDK.logout()
 
     // 2. Clear your app's own user session
-    // yourAppAuthService.clearSession()
+    // TODO: yourAppAuthService.clearSession()
 }
 
 

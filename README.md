@@ -54,6 +54,18 @@ gh skill update --all
 3. Provide a real `partnerAuthToken` when prompted — do not commit production tokens.
 4. Cross-check against the [Android](https://dezerv.github.io/portfolio-tracker-sdk-docs/current/android/getting-started) and [iOS](https://dezerv.github.io/portfolio-tracker-sdk-docs/current/ios/getting-started) docs.
 
+## Recommended models
+
+These skills involve multi-step file discovery, code modification, package resolution, and validation. They work best with capable reasoning models.
+
+| Tier | Models | Notes |
+|------|--------|-------|
+| **Best** | Claude Opus 5.5, Claude Fable 5.1, Claude Sonnet 5 | Latest generation. Best at multi-step file discovery, code modification, and following all instructions |
+| **Good** | Claude Opus 4.6, Claude Sonnet 4, GPT-4o, Gemini 2.5 Pro | Tested with Opus 4.6. Follows all steps, preserves existing code, keeps comments and TODOs |
+| **May struggle** | Claude Haiku 4.5, GPT-4o-mini, smaller models | Likely to skip steps, strip comments, or overwrite existing code |
+
+If your agent supports model selection, prefer Opus or Sonnet for the initial setup. Smaller models are fine for follow-up questions about an already-integrated SDK.
+
 ## Repository layout
 
 ```

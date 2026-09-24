@@ -48,8 +48,10 @@
 // =============================================================================
 // SDK CONTAINER VIEW — presentation layer with Builder + event handling
 // Create as: a new SwiftUI View file in the partner's Views/ directory
+// Wrap in #if canImport so the project builds even if the package hasn't resolved
 // =============================================================================
 
+#if canImport(PortfolioTrackerSDK)
 import SwiftUI
 import PortfolioTrackerSDK
 
@@ -88,9 +90,8 @@ struct SDKContainerView: View {
 
         // =====================================================================
         // 1. Auth token — MUST come from the partner backend, never hardcoded
-        // Replace this placeholder with your backend's /auth/token response
         // =====================================================================
-        let authToken = "PARTNER_AUTH_TOKEN"
+        let authToken = "PARTNER_AUTH_TOKEN" // TODO: Replace with your backend's /auth/token response
 
         // =====================================================================
         // 2. User metadata — personalization + session + attribution fields
@@ -98,9 +99,9 @@ struct SDKContainerView: View {
         // =====================================================================
         let userMeta: [String: Any] = [
             // --- Session / analytics (required) ---
-            "session_id": "REPLACE_SESSION_ID",             // Unique session identifier
+            "session_id": "REPLACE_SESSION_ID",             // TODO: Replace with unique session ID
             "schema_version": "2.0",                         // Always send "2.0"
-            "partner": "REPLACE_PARTNER_ID",                 // Partner identifier (e.g. "moneycontrol")
+            "partner": "REPLACE_PARTNER_ID",                 // TODO: Replace with your partner ID (e.g. "moneycontrol")
 
             // --- Personalization (required) ---
             // partner_category: stock | mutual_fund | index | commodity | ipo | news | homepage | comms | portfolio
@@ -228,15 +229,16 @@ struct SDKContainerView: View {
 
         case .onDeeplink:
             // User tapped a deeplink inside the SDK
-            // ACTION REQUIRED: navigate to this link in your app
             if let link = payload?["link"] as? String {
                 print("DezervSDK: deeplink — \(link)")
+                // TODO: Navigate to this deeplink in your app
             }
 
         case .analytics:
-            // Forward to your analytics service (Firebase, Mixpanel, etc.)
+            // Forward to your analytics service
             let eventName = payload?["eventName"] as? String ?? ""
             print("DezervSDK: analytics — \(eventName)")
+            // TODO: Forward to your analytics (e.g. Firebase, Mixpanel)
 
         case .themeChange:
             // SDK theme changed — sync your app's theme if needed
@@ -249,6 +251,7 @@ struct SDKContainerView: View {
         }
     }
 }
+#endif
 
 
 // =============================================================================
@@ -265,5 +268,5 @@ struct SDKContainerView: View {
 //     DezervSDK.shared.dispose()
 //
 //     // 3. Clear your app's own user session
-//     // yourAppAuthService.clearSession()
+//     // TODO: yourAppAuthService.clearSession()
 // }
