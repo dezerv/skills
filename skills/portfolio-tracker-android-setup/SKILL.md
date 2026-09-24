@@ -270,6 +270,42 @@ Key requirements:
 5. `partnerAuthToken` must come from the partner backend — use `"PARTNER_AUTH_TOKEN"` as placeholder.
 6. Read `references/user-meta-fields.md` for required `partnerUserMeta` fields.
 
+### How to launch the SDK Activity
+
+After creating the Activity, show the partner how to open it. Add these examples as a comment at the bottom of the generated Activity file:
+
+**From another Activity (Intent):**
+```kotlin
+// startActivity(Intent(this, PortfolioActivity::class.java))
+```
+
+**From a Composable (most common for Compose apps):**
+```kotlin
+// val context = LocalContext.current
+// Button(onClick = {
+//     context.startActivity(Intent(context, PortfolioActivity::class.java))
+// }) {
+//     Text("Open Portfolio")
+// }
+```
+
+**From a Fragment:**
+```kotlin
+// startActivity(Intent(requireContext(), PortfolioActivity::class.java))
+```
+
+**With Jetpack Navigation (nav graph):**
+```kotlin
+// // In your nav graph XML or Kotlin DSL:
+// activity("portfolio") {
+//     activityClass = PortfolioActivity::class
+// }
+// // Then navigate:
+// navController.navigate("portfolio")
+```
+
+Include these as commented-out examples at the bottom of the generated Activity file so the partner can uncomment the one that fits their app.
+
 ### Fragments
 
 Use `DezervViewType.TAB_VIEW`, cast `requireActivity()` to `FragmentActivity`, and clear the instance in `onDestroyView()`.

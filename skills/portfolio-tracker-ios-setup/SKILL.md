@@ -221,7 +221,44 @@ Key requirements for the view:
 
 `DezervSDKView` also accepts a `theme` parameter: `DezervSDKView(theme: .dark)`.
 
-The container view is self-contained — the partner wires it into their navigation (tab, sheet, push, etc.) themselves.
+### How to launch the SDK view
+
+After creating the container view, show the partner how to open it. Add one of these examples as a comment at the bottom of the generated file, matching the partner's navigation style:
+
+**Sheet (most common):**
+```swift
+// In your parent view:
+// @State private var showPortfolio = false
+//
+// Button("Open Portfolio") { showPortfolio = true }
+// .sheet(isPresented: $showPortfolio) {
+//     PortfolioTrackerView()  // or whatever the generated view is named
+// }
+```
+
+**Full-screen cover:**
+```swift
+// .fullScreenCover(isPresented: $showPortfolio) {
+//     PortfolioTrackerView()
+// }
+```
+
+**NavigationLink (push):**
+```swift
+// NavigationLink("Portfolio") {
+//     PortfolioTrackerView()
+// }
+```
+
+**Tab in TabView:**
+```swift
+// TabView {
+//     PortfolioTrackerView()
+//         .tabItem { Label("Portfolio", systemImage: "chart.line.uptrend.xyaxis") }
+// }
+```
+
+Include these as commented-out examples at the bottom of the generated file so the partner can uncomment the one that fits their app.
 
 ### Observing errors reactively
 

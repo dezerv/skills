@@ -297,6 +297,34 @@ fun handleUserLogout() {
 
 
 // =============================================================================
+// HOW TO LAUNCH THIS ACTIVITY
+// Uncomment the pattern that matches your app's navigation:
+// =============================================================================
+//
+// --- From another Activity (Intent) ---
+// startActivity(Intent(this, PortfolioActivity::class.java))
+//
+// --- From a Composable (most common for Compose apps) ---
+// val context = LocalContext.current
+// Button(onClick = {
+//     context.startActivity(Intent(context, PortfolioActivity::class.java))
+// }) {
+//     Text("Open Portfolio")
+// }
+//
+// --- From a Fragment ---
+// startActivity(Intent(requireContext(), PortfolioActivity::class.java))
+//
+// --- With Jetpack Navigation (nav graph) ---
+// // In your nav graph:
+// activity("portfolio") {
+//     activityClass = PortfolioActivity::class
+// }
+// // Then navigate:
+// navController.navigate("portfolio")
+
+
+// =============================================================================
 // FRAGMENT variant (for TAB_VIEW / embedded navigation)
 // =============================================================================
 //
