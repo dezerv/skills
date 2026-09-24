@@ -89,6 +89,53 @@ In `AndroidManifest.xml`:
 <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 ```
 
+## Step 2b: Locate integration points
+
+Before writing any code, discover the partner's project structure so the SDK init lands in the right place.
+
+### Find the Application class
+
+```bash
+grep -rn "class.*Application()" --include="*.kt" --include="*.java" .
+grep -rn "android:name=" --include="AndroidManifest.xml" . | grep -i "application"
+```
+
+The warmup (`DezervSDK.initialize`) **must** go in the `Application.onCreate()`. If no custom Application class exists, you'll need to create one and register it in the manifest.
+
+### Check for existing SDK integration
+
+```bash
+grep -rn "import.*dezerv" --include="*.kt" --include="*.java" .
+grep -rn "DezervSDK" --include="*.kt" --include="*.java" .
+```
+
+If results are found, the SDK may already be integrated. Review the existing integration before adding duplicate code. Ask the user whether they want to update or replace the existing setup.
+
+### Find the hosting Activity/Fragment
+
+```bash
+grep -rn "AppCompatActivity\|FragmentActivity" --include="*.kt" --include="*.java" .
+```
+
+Identify which Activity or Fragment will host `DezervSDKView`. If the partner already has a screen for it, modify that. If not, ask where they want the SDK presented.
+
+### Check the layout files
+
+```bash
+grep -rn "DezervSDKView\|dezervSDKView" --include="*.xml" .
+```
+
+If an existing layout already includes `DezervSDKView`, use that layout rather than creating a new one.
+
+### Confirm the Gradle module
+
+Check which module the app target lives in — the SDK dependency must be in the same module's `build.gradle.kts` (or `build.gradle`):
+
+```bash
+find . -name "build.gradle.kts" -o -name "build.gradle" | head -10
+grep -rn "portfolio_tracker_sdk" --include="build.gradle*" .
+```
+
 ## Step 3 (recommended): Warmup at app start
 
 Call early (e.g. `Application.onCreate`). Non-blocking. Match `theme` / `viewType` with what you use later in `DezervSDKConfig`.
@@ -266,39 +313,13 @@ When the partner user logs out of the host app:
 DezervSDK.logout()
 ```
 
-## Required `partnerUserMeta` fields (checklist)
+## Required `partnerUserMeta` fields
 
-| Field | Required | Notes |
-|-------|----------|--------|
-| `partner_category` | Yes | Fixed enum values; do not rename |
-| `partner_symbol` | Yes | `""` on `homepage` / `news` |
-| `partner_page_title` | Yes | |
-| `partner_image_text` | Yes | |
-| `partner_keywords` | When `news` | Array of article tags |
-| `partner` | Yes | Partner id |
-| `session_id` | Yes | |
-| `schema_version` | Yes | Send `"2.0"` |
-| `partner_source` | Recommended | e.g. `home_tab` |
-| `partner_page_url` | Recommended | Launch page URL |
-| `partner_campaign` | Recommended | Campaign id |
-| `phone` | No | |
-| `pan` | No | |
-| `deeplink` | No | In-SDK route |
-| `sdkMetrics` | No | `startTime` / `endTime` of `/auth/token` |
-| `partner_section_name` | No | e.g. `Top Gainers` |
-| `partner_cta_copy` | No | CTA label text |
-| `partner_cta_position` | No | e.g. `hero`, `inline`, `sticky` |
-| `partner_medium` | No | e.g. `app`, `whatsapp` |
-
-## Error codes
-
-| Code | Description |
-|------|-------------|
-| `sdk_error` | An unexpected SDK error occurred |
-| `network_error` | Network connectivity issues |
-| `unknown_error` | Unknown error occurred |
+Read `references/user-meta-fields.md` for the full field table when constructing or debugging `partnerUserMeta`.
 
 ## Verification
+
+### Build & runtime checks
 
 1. Gradle sync succeeds; `in.dezerv:portfolio_tracker_sdk:0.8.6` resolves
 2. App builds on API 33+ device/emulator
@@ -306,16 +327,54 @@ DezervSDK.logout()
 4. Logcat receives `sdkInitializationSuccess` (or a clear `sdkInitializationError`)
 5. Exit closes the host screen / navigates correctly
 
+### Placement validation (run after all steps)
+
+After writing code, verify correct placement:
+
+1. **Warmup is in the Application class only** — confirm `DezervSDK.initialize` appears exactly once, inside `Application.onCreate()`:
+   ```bash
+   grep -rn "DezervSDK.initialize" --include="*.kt" --include="*.java" .
+   ```
+   Expected: one match, in the file identified in Step 2b. If found elsewhere (e.g. in an Activity), remove the duplicate.
+
+2. **Application class is registered in the manifest**:
+   ```bash
+   grep -n "android:name=" --include="AndroidManifest.xml" -r . | grep -i "application"
+   ```
+   The `<application>` tag must have `android:name` pointing to the custom Application class.
+
+3. **DezervSDKView is in a layout used by the hosting Activity**:
+   ```bash
+   grep -rn "DezervSDKView" --include="*.xml" .
+   grep -rn "setContentView\|R.layout" --include="*.kt" --include="*.java" . | grep -i "portfolio\|dezerv\|sdk"
+   ```
+   The layout containing `DezervSDKView` must be the one inflated by the Activity that calls `Builder` + `show()`.
+
+4. **Builder + show() are in an Activity/Fragment, not the Application class**:
+   ```bash
+   grep -rn "DezervSDK.Builder\|\.show()" --include="*.kt" --include="*.java" .
+   ```
+   These should be in the hosting Activity or Fragment, never in `Application.onCreate()`.
+
+5. **No duplicate SDK views** — only one `DezervSDKView` per screen:
+   ```bash
+   grep -rn "DezervSDKView" --include="*.xml" --include="*.kt" --include="*.java" .
+   ```
+
+6. **No hardcoded tokens** — confirm placeholder strings are present, not real JWTs:
+   ```bash
+   grep -rn "partnerAuthToken" --include="*.kt" --include="*.java" .
+   ```
+   The value should be `"PARTNER_AUTH_TOKEN"` or fetched from a backend call, never a real token literal.
+
+7. **API level gate exists** — confirm the `TIRAMISU` check wraps SDK calls:
+   ```bash
+   grep -rn "TIRAMISU\|Build.VERSION_CODES" --include="*.kt" --include="*.java" .
+   ```
+
 ## Troubleshooting
 
-| Symptom | Check |
-|---------|--------|
-| Dependency not found | `google()` + `mavenCentral()`; version `0.8.6` |
-| Crash / no UI below API 33 | Gate on `TIRAMISU`; show fallback message |
-| Auth / blank SDK | Invalid or missing `partnerAuthToken`; confirm backend JWT |
-| Personalization wrong | Required meta fields missing or wrong `partner_category` |
-| Warmup slow / no benefit | Pass `environment`; match theme between warmup and `DezervSDKConfig` |
-| Release minify issues | Check ProGuard rules below |
+Read `references/troubleshooting.md` if the build fails, the SDK shows a blank screen, or runtime errors appear.
 
 ## ProGuard (release minify)
 
@@ -330,8 +389,23 @@ As of 0.8.6 the SDK ships narrower consumer rules (`-keepclassmembers` instead o
 
 The SDK automatically resizes its WebView when the soft keyboard opens. If you embed the SDK in a custom container with its own keyboard handling, be aware of this — it may affect your layout.
 
-## Do not
+## Gotchas
 
-- Do not invent a `PortfolioTrackerSDK` / username-password init API — use `DezervSDK` + `DezervSDKConfig`
-- Do not hardcode production JWTs or PII in source control
-- Do not skip `DezervSDKView` + `withView` + `show()` — dependency alone is not enough
+- The agent may try to create a `PortfolioTrackerSDK(username, password)` or similar init — **this API does not exist**. The only init path is `DezervSDK.initialize` (warmup) + `DezervSDK.Builder(activity)` + `DezervSDKConfig`. If the agent invents a different API shape, it's hallucinating.
+- The agent may consider the Gradle dependency as "done" — it's not. The SDK does nothing until `Builder` + `withView` + `show()` are called with a configured `DezervSDKConfig`. Adding the dependency is step 1 of 5.
+- `DezervSDKEnvironment.INTEGRATION` exists in the enum but is **Dezerv-internal only**. Never suggest it for partner apps — only `PRODUCTION` or `PREPROD`.
+- The agent may put `DezervSDK.Builder` in the `Application.onCreate()` alongside warmup. Builder + `show()` belong in an Activity or Fragment, not in the Application class.
+- `DezervSDK.initialize` should be called **exactly once** in `Application.onCreate()`. If the agent also adds it to an Activity, remove the duplicate.
+- The Activity hosting `DezervSDKView` **must** extend `FragmentActivity` (or `AppCompatActivity`). If the agent creates a plain `Activity`, `Builder` will crash at runtime.
+- The SDK requires **Android 13 (API 33)+** at runtime. All SDK calls must be gated with `Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU`. Without this check, the app will crash on older devices.
+- Never hardcode real `partnerAuthToken` JWTs or PII (`phone`, `pan`) in source. Use placeholder values in code; fetch real tokens from the partner backend at runtime.
+
+## Run validation
+
+After completing all steps, run the automated validator from the project root:
+
+```bash
+bash scripts/validate-integration.sh
+```
+
+Fix any failures before considering the integration complete.

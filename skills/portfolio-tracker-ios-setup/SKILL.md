@@ -80,6 +80,51 @@ import PortfolioTrackerSDK
 
 Do **not** add local-network / Bonjour keys unless the partner has a separate requirement — they are not part of the Dezerv install docs.
 
+## Step 2b: Locate integration points
+
+Before writing any code, discover the partner's project structure so the SDK init lands in the right place.
+
+### Find the app entry point
+
+```bash
+grep -r "@main" --include="*.swift" .
+```
+
+This locates the `@main` App struct (SwiftUI) or `@main` AppDelegate. The warmup (`DezervSDK.shared.initialize`) **must** go in this file's `init()` (SwiftUI) or `application(_:didFinishLaunchingWithOptions:)` (UIKit).
+
+If no `@main` is found, check for `@UIApplicationMain`:
+
+```bash
+grep -r "@UIApplicationMain" --include="*.swift" .
+```
+
+### Check for existing SDK integration
+
+```bash
+grep -r "import PortfolioTrackerSDK" --include="*.swift" .
+grep -r "DezervSDK" --include="*.swift" .
+```
+
+If results are found, the SDK may already be integrated. Review the existing integration before adding duplicate code. Ask the user whether they want to update or replace the existing setup.
+
+### Identify the presentation target
+
+```bash
+grep -rn "DezervSDKView" --include="*.swift" .
+```
+
+If the partner already has a view hosting the SDK, modify that rather than creating a new one. If not, ask where they want the SDK presented (new screen, sheet, tab, etc.).
+
+### Confirm the Xcode target
+
+Check which target the entry-point file belongs to — look for it in `*.pbxproj` or `Package.swift`:
+
+```bash
+grep -l "PortfolioTrackerSDK" . -r --include="*.pbxproj" --include="Package.swift"
+```
+
+Ensure the SDK product is linked to the **same target** as the app entry point.
+
 ## Step 3 (recommended): Warmup at app start
 
 The SDK is a singleton: `DezervSDK.shared`. Warmup is async and non-blocking. Pass `environment` so pre-load uses the correct URL (defaults to production if omitted).
@@ -276,31 +321,13 @@ DezervSDK.shared.dispose()
 
 Call `dispose()` when the SDK UI is dismissed; call `logout()` when the partner user signs out of the host app.
 
-## Required `partnerUserMeta` fields (checklist)
+## Required `partnerUserMeta` fields
 
-| Field | Required | Notes |
-|-------|----------|--------|
-| `partner_category` | Yes | Fixed enum values; do not rename |
-| `partner_symbol` | Yes | `""` on `homepage` / `news` |
-| `partner_page_title` | Yes | |
-| `partner_image_text` | Yes | |
-| `partner_keywords` | When `news` | Array of article tags |
-| `partner` | Yes | Partner id |
-| `session_id` | Yes | |
-| `schema_version` | Yes | Send `"2.0"` |
-| `partner_source` | Recommended | e.g. `home_tab` |
-| `partner_page_url` | Recommended | Launch page URL |
-| `partner_campaign` | Recommended | Campaign id |
-| `phone` | No | |
-| `pan` | No | |
-| `deeplink` | No | In-SDK route |
-| `sdkMetrics` | No | `startTime` / `endTime` of `/auth/token` |
-| `partner_section_name` | No | e.g. `Top Gainers` |
-| `partner_cta_copy` | No | CTA label text |
-| `partner_cta_position` | No | e.g. `hero`, `inline`, `sticky` |
-| `partner_medium` | No | e.g. `app`, `whatsapp` |
+Read `references/user-meta-fields.md` for the full field table when constructing or debugging `partnerUserMeta`.
 
 ## Verification
+
+### Build & runtime checks
 
 1. SPM resolves `portfolio-sdk-ios`; `import PortfolioTrackerSDK` compiles
 2. App builds for iOS 15+
@@ -308,19 +335,58 @@ Call `dispose()` when the SDK UI is dismissed; call `logout()` when the partner 
 4. Console shows init success (or a clear init error)
 5. Exit dismisses the view and `dispose()` runs
 
+### Placement validation (run after all steps)
+
+After writing code, verify correct placement:
+
+1. **Warmup is in the entry point only** — confirm `DezervSDK.shared.initialize` appears exactly once, inside the `@main` struct/class:
+   ```bash
+   grep -rn "DezervSDK.shared.initialize" --include="*.swift" .
+   ```
+   Expected: one match, in the file identified in Step 2b. If found elsewhere, remove the duplicate.
+
+2. **No duplicate imports** — `import PortfolioTrackerSDK` should appear only in files that use the SDK:
+   ```bash
+   grep -rn "import PortfolioTrackerSDK" --include="*.swift" .
+   ```
+
+3. **Builder + DezervSDKView are in a presentation context** — not in the `@main` App struct:
+   ```bash
+   grep -rn "DezervSDK.Builder" --include="*.swift" .
+   grep -rn "DezervSDKView()" --include="*.swift" .
+   ```
+   Both should be in a View or ViewController, not in the app entry point.
+
+4. **dispose() is called on dismissal** — confirm cleanup exists:
+   ```bash
+   grep -rn "\.dispose()" --include="*.swift" .
+   ```
+
+5. **No hardcoded tokens** — confirm placeholder strings are present, not real JWTs:
+   ```bash
+   grep -rn "partnerAuthToken" --include="*.swift" .
+   ```
+   The value should be `"PARTNER_AUTH_TOKEN"` or fetched from a backend call, never a real token literal.
+
 ## Troubleshooting
 
-| Symptom | Check |
-|---------|--------|
-| Package not found | URL `https://github.com/dezerv/portfolio-sdk-ios`; network; remove/re-add package |
-| Deployment target errors | Set iOS **15.0+**, Xcode **15+** |
-| Face ID issues | `NSFaceIDUsageDescription` present; test on device |
-| Auth / blank SDK | Invalid or missing `partnerAuthToken` |
-| Personalization wrong | Required meta fields missing or wrong `partner_category` |
-| Warmup ineffective | Pass `environment: .production` or `.preprod` |
+Read `references/troubleshooting.md` if the build fails, the SDK shows a blank screen, or runtime errors appear.
 
-## Do not
+## Gotchas
 
-- Do not invent a `PortfolioTrackerSDK(Configuration(apiUsername:…))` init API — use `DezervSDK.shared` / `DezervSDK.Builder` + `DezervSDKConfigParms`
-- Do not hardcode production tokens or PII in source control
-- Do not treat SPM install alone as done — you must `setConfig` + `build` + present `DezervSDKView`
+- The agent may try to create a `PortfolioTrackerSDK(Configuration(apiUsername:…))` or similar username/password init — **this API does not exist**. The only init path is `DezervSDK.shared` (singleton) + `DezervSDK.Builder()` + `DezervSDKConfigParms`. If the agent invents a different API shape, it's hallucinating.
+- The agent may consider SPM install as "done" — it's not. The SDK does nothing until `setConfig` + `build` returns `.success` and `DezervSDKView` is presented. Adding the package dependency is step 1 of 4.
+- `.integration` environment exists in the SDK enum but is **Dezerv-internal only**. Never suggest it for partner apps — only `.production` or `.preprod`.
+- The agent may put `DezervSDK.Builder` in the `@main` App struct alongside warmup. Builder + view presentation belong in a separate View or ViewController, not in the app entry point.
+- `DezervSDK.shared` is a singleton — calling `initialize` more than once is a bug. If the agent adds warmup to both `AppDelegate` and a SwiftUI `@main` struct, one must be removed.
+- Never hardcode real `partnerAuthToken` JWTs or PII (`phone`, `pan`) in source. Use placeholder values in code; fetch real tokens from the partner backend at runtime.
+
+## Run validation
+
+After completing all steps, run the automated validator from the project root:
+
+```bash
+bash scripts/validate-integration.sh
+```
+
+Fix any failures before considering the integration complete.
