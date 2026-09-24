@@ -14,9 +14,9 @@ description: >
 Integrate the Dezerv Portfolio Tracker SDK into the **partner app** (not the Skills or docs repos). Follow steps in order. After each step, verify before continuing.
 
 Canonical docs (prefer these if anything conflicts):
-- https://github.com/dezerv/portfolio-tracker-sdk-docs/blob/main/docs/ios/installation.md
-- https://github.com/dezerv/portfolio-tracker-sdk-docs/blob/main/docs/ios/usage.md
-- https://github.com/dezerv/portfolio-tracker-sdk-docs/blob/main/docs/ios/events.md
+- https://dezerv.github.io/portfolio-tracker-sdk-docs/current/ios/installation
+- https://dezerv.github.io/portfolio-tracker-sdk-docs/current/ios/usage
+- https://dezerv.github.io/portfolio-tracker-sdk-docs/current/ios/events
 
 ## Prerequisites
 
