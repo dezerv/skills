@@ -59,17 +59,19 @@ gh skill update --all
 ```
 skills/
   portfolio-tracker-android-setup/
-    SKILL.md                          # Core setup instructions
+    SKILL.md                          # Core setup instructions (~345 lines)
     references/
-      user-meta-fields.md            # partnerUserMeta field table (loaded on demand)
-      troubleshooting.md             # Symptom → fix lookup (loaded on demand)
+      activity-template.kt           # Full Activity reference implementation
+      user-meta-fields.md            # partnerUserMeta field table
+      troubleshooting.md             # Symptom → fix lookup
     scripts/
       validate-integration.sh        # Automated integration checks (8 checks)
   portfolio-tracker-ios-setup/
-    SKILL.md                          # Core setup instructions
+    SKILL.md                          # Core setup instructions (~284 lines)
     references/
-      user-meta-fields.md            # partnerUserMeta field table (loaded on demand)
-      troubleshooting.md             # Symptom → fix lookup (loaded on demand)
+      sdk-view-template.swift        # Full SwiftUI View reference implementation
+      user-meta-fields.md            # partnerUserMeta field table
+      troubleshooting.md             # Symptom → fix lookup
     scripts/
       validate-integration.sh        # Automated integration checks (7 checks)
 ```

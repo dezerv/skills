@@ -36,140 +36,202 @@ The SDK does **not** use username/password in-app. You need:
 
 If the user has no token yet, stop after dependency/permissions and tell them to obtain a partner auth token from Dezerv before calling `Builder` / `show()`.
 
-## Step 1: Add the SDK dependency
+## Step 1: Discover the project structure
 
-Current published version: **0.8.6** (Maven Central).
+Before modifying anything, map the project so every change lands in the right file.
 
-### Kotlin DSL (recommended)
-
-In `settings.gradle.kts`, ensure Maven Central is available:
-
-```kotlin
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-```
-
-In the app module `build.gradle.kts`:
-
-```kotlin
-dependencies {
-    implementation("in.dezerv:portfolio_tracker_sdk:0.8.6")
-}
-```
-
-### Groovy
-
-In the app `build.gradle`:
-
-```groovy
-repositories {
-    google()
-    mavenCentral()
-}
-
-dependencies {
-    implementation 'in.dezerv:portfolio_tracker_sdk:0.8.6'
-}
-```
-
-Sync Gradle (`File > Sync Now` or `./gradlew :app:dependencies`).
-
-## Step 2: Permissions
-
-In `AndroidManifest.xml`:
-
-```xml
-<uses-permission android:name="android.permission.INTERNET" />
-<!-- Optional to declare explicitly; SDK merges USE_BIOMETRIC automatically -->
-<uses-permission android:name="android.permission.USE_BIOMETRIC" />
-```
-
-## Step 2b: Locate integration points
-
-Before writing any code, discover the partner's project structure so the SDK init lands in the right place.
-
-### Find the Application class
-
-```bash
-grep -rn "class.*Application()" --include="*.kt" --include="*.java" .
-grep -rn "android:name=" --include="AndroidManifest.xml" . | grep -i "application"
-```
-
-The warmup (`DezervSDK.initialize`) **must** go in the `Application.onCreate()`. If no custom Application class exists, you'll need to create one and register it in the manifest.
-
-### Check for existing SDK integration
+### 1a. Check for existing SDK integration
 
 ```bash
 grep -rn "import.*dezerv" --include="*.kt" --include="*.java" .
 grep -rn "DezervSDK" --include="*.kt" --include="*.java" .
 ```
 
-If results are found, the SDK may already be integrated. Review the existing integration before adding duplicate code. Ask the user whether they want to update or replace the existing setup.
+If results are found, the SDK is already integrated. Review what exists and ask the user whether to update or replace it. Do **not** add duplicate init/builder code.
 
-### Find the hosting Activity/Fragment
-
-```bash
-grep -rn "AppCompatActivity\|FragmentActivity" --include="*.kt" --include="*.java" .
-```
-
-Identify which Activity or Fragment will host `DezervSDKView`. If the partner already has a screen for it, modify that. If not, ask where they want the SDK presented.
-
-### Check the layout files
+### 1b. Determine Kotlin DSL vs Groovy
 
 ```bash
-grep -rn "DezervSDKView\|dezervSDKView" --include="*.xml" .
+find . -name "build.gradle.kts" -not -path "*/build/*" | head -5
+find . -name "build.gradle" -not -path "*/build/*" -not -name "*.kts" | head -5
+find . -name "settings.gradle*" -not -path "*/build/*"
 ```
 
-If an existing layout already includes `DezervSDKView`, use that layout rather than creating a new one.
+- `.kts` files → Kotlin DSL syntax.
+- `.gradle` files (no `.kts`) → Groovy syntax.
 
-### Confirm the Gradle module
+Identify the **app module's** build file (usually `app/build.gradle.kts` or `app/build.gradle`). Multi-module projects may have several — the SDK dependency goes in the module that contains the Activity hosting the SDK.
 
-Check which module the app target lives in — the SDK dependency must be in the same module's `build.gradle.kts` (or `build.gradle`):
+### 1c. Find the Application class
 
 ```bash
-find . -name "build.gradle.kts" -o -name "build.gradle" | head -10
-grep -rn "portfolio_tracker_sdk" --include="build.gradle*" .
+grep -rn "class.*:.*Application()" --include="*.kt" --include="*.java" . | grep -v "/build/"
+grep -rn "android:name=" --include="AndroidManifest.xml" . | grep -v "/build/" | grep -i "application"
 ```
 
-## Step 3 (recommended): Warmup at app start
+Read the matched Application class file. If no custom Application class exists, you'll create one in Step 4.
 
-Call early (e.g. `Application.onCreate`). Non-blocking. Match `theme` / `viewType` with what you use later in `DezervSDKConfig`.
+### 1d. Find the main AndroidManifest.xml
 
+```bash
+find . -name "AndroidManifest.xml" -not -path "*/build/*" | head -5
+```
+
+There may be several (app, libraries, test). The one in the **app module** (usually `app/src/main/AndroidManifest.xml`) is where permissions and the Application class are registered.
+
+### 1e. Note the project's file/folder conventions
+
+```bash
+find . -name "*.kt" -not -path "*/build/*" -maxdepth 5 | head -20
+```
+
+Observe where the partner keeps their Activity/Fragment files (e.g. `ui/`, `features/`, `screens/`, or flat in the main package). Create the SDK hosting Activity following the same convention. The skill creates a dedicated `PortfolioActivity` — how the partner navigates to it (intent, nav component, etc.) is their decision.
+
+The hosting Activity **must** extend `FragmentActivity` or `AppCompatActivity`.
+
+## Step 2: Add the SDK dependency
+
+Current published version: **0.8.6** (Maven Central).
+
+### 2a. Ensure Maven Central is in repositories
+
+Read the project's `settings.gradle.kts` (or `settings.gradle`). Check if `mavenCentral()` is already listed in the `repositories` block:
+
+```bash
+grep -n "mavenCentral" --include="settings.gradle*" --include="build.gradle*" -r . | grep -v "/build/"
+```
+
+If missing, **append** `mavenCentral()` to the existing `repositories` block — do not replace other repositories.
+
+### 2b. Add the dependency to the app module
+
+Read the app module's build file. Find the existing `dependencies` block and **append** the SDK line:
+
+**Kotlin DSL** (`.kts`):
 ```kotlin
-import android.app.Application
-import android.os.Build
-import `in`.dezerv.portfolio_tracker_sdk.DezervSDK
-import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKEnvironment
-import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKInitConfig
-import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKTheme
-import `in`.dezerv.portfolio_tracker_sdk.core.DezervViewType
-
-class MyApplication : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            DezervSDK.initialize(
-                context = this,
-                dezervSDKInitConfig = DezervSDKInitConfig(
-                    theme = DezervSDKTheme.light,
-                    viewType = DezervViewType.FULL_VIEW,
-                    isDebug = BuildConfig.DEBUG,
-                    environment = DezervSDKEnvironment.PRODUCTION // or PREPROD
-                )
-            )
-        }
-    }
-}
+implementation("in.dezerv:portfolio_tracker_sdk:0.8.6")
 ```
 
-Register `MyApplication` in the manifest. If warmup fails, the SDK still works; first open may be slower. Listen for `sdkWarmupComplete` to confirm warmup finished.
+**Groovy** (`.gradle`):
+```groovy
+implementation 'in.dezerv:portfolio_tracker_sdk:0.8.6'
+```
 
-## Step 4: Add `DezervSDKView` to the layout
+Do not replace the dependencies block. Add the line alongside existing dependencies.
+
+## Step 2c: Sync and download the dependency — MANDATORY
+
+**Do not skip this step.** The dependency does not exist locally until Gradle resolves it.
+
+```bash
+./gradlew :app:dependencies --configuration implementation 2>&1 | grep -i "dezerv"
+```
+
+If `./gradlew` is not executable:
+```bash
+chmod +x ./gradlew && ./gradlew :app:dependencies --configuration implementation 2>&1 | grep -i "dezerv"
+```
+
+If the project uses a different app module name (not `app`), replace `:app:` with the correct module path found in Step 1b.
+
+Wait for it to finish. **Verify the output shows `in.dezerv:portfolio_tracker_sdk:0.8.6`.**
+
+If it doesn't resolve:
+- Confirm `mavenCentral()` is in repositories (Step 2a).
+- Confirm the version `0.8.6` is correct.
+- Check network connectivity.
+
+**Do not proceed to Step 3 until this step passes.**
+
+## Step 3: Add permissions to AndroidManifest.xml
+
+Read the app module's `AndroidManifest.xml` (identified in Step 1d). Check which permissions already exist:
+
+```bash
+grep -n "uses-permission" --include="AndroidManifest.xml" -r . | grep -v "/build/"
+```
+
+If `INTERNET` is missing, add it. `USE_BIOMETRIC` is optional (the SDK merges it automatically):
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+```
+
+Add **inside** the `<manifest>` tag, **before** the `<application>` tag. Do not duplicate existing permissions.
+
+## Step 4 (recommended): Add SDK warmup to the Application class
+
+### If a custom Application class exists (found in Step 1c)
+
+1. Read the file. Add the SDK imports alongside existing imports:
+   ```kotlin
+   import `in`.dezerv.portfolio_tracker_sdk.DezervSDK
+   import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKEnvironment
+   import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKInitConfig
+   import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKTheme
+   import `in`.dezerv.portfolio_tracker_sdk.core.DezervViewType
+   ```
+
+2. Inside the existing `onCreate()`, **append** after `super.onCreate()` and any existing code:
+   ```kotlin
+   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+       DezervSDK.initialize(
+           context = this,
+           dezervSDKInitConfig = DezervSDKInitConfig(
+               theme = DezervSDKTheme.light,
+               viewType = DezervViewType.FULL_VIEW,
+               isDebug = BuildConfig.DEBUG,
+               environment = DezervSDKEnvironment.PRODUCTION
+           )
+       )
+   }
+   ```
+   Do **not** replace the `onCreate()` body — preserve existing code.
+
+### If no custom Application class exists
+
+1. Create a new file in the same package as the main Activity:
+   ```kotlin
+   import android.app.Application
+   import android.os.Build
+   import `in`.dezerv.portfolio_tracker_sdk.DezervSDK
+   import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKEnvironment
+   import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKInitConfig
+   import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKTheme
+   import `in`.dezerv.portfolio_tracker_sdk.core.DezervViewType
+
+   class MyApplication : Application() {
+       override fun onCreate() {
+           super.onCreate()
+           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+               DezervSDK.initialize(
+                   context = this,
+                   dezervSDKInitConfig = DezervSDKInitConfig(
+                       theme = DezervSDKTheme.light,
+                       viewType = DezervViewType.FULL_VIEW,
+                       isDebug = BuildConfig.DEBUG,
+                       environment = DezervSDKEnvironment.PRODUCTION
+                   )
+               )
+           }
+       }
+   }
+   ```
+   Use the partner's naming convention. Check existing classes for the package name.
+
+2. Register in `AndroidManifest.xml` — add `android:name` to the `<application>` tag:
+   ```xml
+   <application
+       android:name=".MyApplication"
+       ... existing attributes ... >
+   ```
+   If `android:name` already points to another class, modify that class instead.
+
+## Step 5: Add DezervSDKView to a layout
+
+### If modifying an existing Activity's layout
+
+Read the layout XML that the hosting Activity inflates (find it via `setContentView` or `R.layout.`). **Add** the SDK view inside the existing layout hierarchy where the user wants it:
 
 ```xml
 <in.dezerv.portfolio_tracker_sdk.DezervSDKView
@@ -178,128 +240,26 @@ Register `MyApplication` in the manifest. If warmup fails, the SDK still works; 
     android:layout_height="match_parent" />
 ```
 
-## Step 5: Build config, bind view, show
+### If creating a new Activity
 
-```kotlin
-import android.os.Build
-import android.os.Bundle
-import android.util.Log
-import androidx.appcompat.app.AppCompatActivity
-import `in`.dezerv.portfolio_tracker_sdk.DezervSDK
-import `in`.dezerv.portfolio_tracker_sdk.DezervSDKView
-import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKConfig
-import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKEvent
-import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKInitConfig
-import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKTheme
-import `in`.dezerv.portfolio_tracker_sdk.core.DezervViewType
-import org.json.JSONObject
+Create a new layout file (e.g. `activity_portfolio.xml`) with the SDK view as the root or inside a container.
 
-class PortfolioActivity : AppCompatActivity() {
-    private var dezervSDKInstance: DezervSDK? = null
+## Step 6: Build config, bind view, show
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_portfolio)
+Read the hosting Activity file. Then modify it to add the SDK setup. Read `references/activity-template.kt` for the full reference implementation with event handling.
 
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            // SDK requires Android 13+
-            return
-        }
+Key requirements:
 
-        val dezervSDKView: DezervSDKView = findViewById(R.id.dezervSDKView)
-
-        // Replace with JWT from partner backend
-        val authToken = "PARTNER_AUTH_TOKEN"
-
-        val userMeta = JSONObject().apply {
-            // Session / analytics (required)
-            put("session_id", "REPLACE_SESSION_ID")
-            put("schema_version", "2.0")
-            put("partner", "REPLACE_PARTNER_ID") // e.g. moneycontrol
-
-            // Personalization (required)
-            put("partner_category", "stock") // stock|mutual_fund|index|commodity|ipo|news|homepage|comms|portfolio
-            put("partner_symbol", "RELIANCE") // empty string when category is homepage or news
-            put("partner_page_title", "Reliance Industries Share Price")
-            put("partner_image_text", "Track your portfolio in one place")
-            // put("partner_keywords", listOf("tag1")) // required when partner_category == news
-
-            // Recommended attribution
-            put("partner_source", "home_tab")
-            put("partner_page_url", "https://partner.com/stocks/reliance-industries")
-            put("partner_campaign", "example_campaign")
-
-            // Optional
-            // put("phone", "9898989898")
-            // put("pan", "ABCDE1234F")
-            // put("deeplink", "")
-            // put("sdkMetrics", JSONObject().put("startTime", 0.0).put("endTime", 0.0))
-            // put("partner_section_name", "Top Gainers")
-            // put("partner_cta_copy", "Stop Guessing, Get wealth review by an Expert")
-            // put("partner_cta_position", "hero") // hero|inline|sticky
-            // put("partner_medium", "app") // app|whatsapp
-        }
-
-        val config = DezervSDKConfig(
-            partnerAuthToken = authToken,
-            partnerUserMeta = userMeta,
-            theme = DezervSDKTheme.light, // or dark — match warmup
-            viewType = DezervViewType.FULL_VIEW, // TAB_VIEW for fragments / nested UI
-            isDebug = BuildConfig.DEBUG
-        )
-
-        dezervSDKInstance = DezervSDK.Builder(this)
-            .setConfig(config)
-            .withView(dezervSDKView)
-            .withMessageListener { event, payload ->
-                when (event) {
-                    DezervSDKEvent.sdkInitializationSuccess ->
-                        Log.d("DezervSDK", "initialized")
-                    DezervSDKEvent.sdkInitializationError ->
-                        Log.e("DezervSDK", "init error: ${payload?.optString("error")}")
-                    DezervSDKEvent.sdkWarmupComplete ->
-                        Log.d("DezervSDK", "warmup complete")
-                    DezervSDKEvent.exit -> {
-                        val errorCode = payload?.optString("errorCode")
-                        if (errorCode == "sdk_error") {
-                            // Re-initialize SDK with new auth token
-                            Log.e("DezervSDK", "exit due to sdk_error — re-init needed")
-                        } else {
-                            finish()
-                        }
-                    }
-                    DezervSDKEvent.userAuth ->
-                        Log.d("DezervSDK", "userAuth: $payload")
-                    DezervSDKEvent.setUserId ->
-                        Log.d("DezervSDK", "userId: ${payload?.optString("userId")}")
-                    DezervSDKEvent.onDeeplink ->
-                        Log.d("DezervSDK", "deeplink: ${payload?.optString("link")}")
-                    DezervSDKEvent.analytics ->
-                        Log.d("DezervSDK", "analytics: $payload")
-                    DezervSDKEvent.themeChange ->
-                        Log.d("DezervSDK", "theme: ${payload?.optString("theme")}")
-                    else -> Log.d("DezervSDK", "event=$event payload=$payload")
-                }
-            }
-            .build()
-
-        dezervSDKInstance?.show()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        dezervSDKInstance = null
-    }
-}
-```
-
-To update the listener after build:
-
-```kotlin
-dezervSDKInstance?.setOnMessageListener { event, payload ->
-    // Updated handler
-}
-```
+1. Add SDK imports alongside existing imports.
+2. Add a `private var dezervSDKInstance: DezervSDK? = null` property.
+3. Inside `onCreate()`, **after** `setContentView(...)` and any existing setup code, append the SDK configuration:
+   - Gate with `Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU`.
+   - Find the view: `findViewById<DezervSDKView>(R.id.dezervSDKView)`.
+   - Build config with `DezervSDKConfig(partnerAuthToken, partnerUserMeta, theme, viewType, isDebug)`.
+   - Build and show: `DezervSDK.Builder(this).setConfig(config).withView(view).withMessageListener { ... }.build()` then `.show()`.
+4. In `onDestroy()`, null out the instance.
+5. `partnerAuthToken` must come from the partner backend — use `"PARTNER_AUTH_TOKEN"` as placeholder.
+6. Read `references/user-meta-fields.md` for required `partnerUserMeta` fields.
 
 ### Fragments
 
