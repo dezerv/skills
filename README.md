@@ -13,7 +13,7 @@ Skills that walk partners through setting up the Portfolio Tracker SDK on Androi
 | `portfolio-tracker-android-setup` | Android | Gradle, permissions, partner auth token, `partnerUserMeta`, `DezervSDKView`, Builder/`show()`, warmup, events |
 | `portfolio-tracker-ios-setup` | iOS | SPM, Face ID, partner auth token, `partnerUserMeta`, `DezervSDK.Builder`, `DezervSDKView`, warmup, events |
 
-Full API reference: [portfolio-tracker-sdk-docs](https://github.com/dezerv/portfolio-tracker-sdk-docs)
+Full API reference: [Portfolio Tracker SDK Docs](https://dezerv.github.io/portfolio-tracker-sdk-docs/)
 
 ### Install
 
@@ -52,7 +52,7 @@ gh skill update --all
 1. Open your partner Android or iOS app in an agent that supports skills.
 2. Ask the agent to set up the Portfolio Tracker / Dezerv SDK (or invoke the skill by name).
 3. Provide a real `partnerAuthToken` when prompted — do not commit production tokens.
-4. Cross-check against the [Android](https://github.com/dezerv/portfolio-tracker-sdk-docs/tree/main/docs/android) and [iOS](https://github.com/dezerv/portfolio-tracker-sdk-docs/tree/main/docs/ios) docs.
+4. Cross-check against the [Android](https://dezerv.github.io/portfolio-tracker-sdk-docs/current/android/getting-started) and [iOS](https://dezerv.github.io/portfolio-tracker-sdk-docs/current/ios/getting-started) docs.
 
 ## Repository layout
 
@@ -73,6 +73,6 @@ gh skill publish             # create a release
 
 ## Support
 
-- Docs: https://github.com/dezerv/portfolio-tracker-sdk-docs
+- Docs: https://dezerv.github.io/portfolio-tracker-sdk-docs/
 - Issues: https://github.com/dezerv/Skills/issues
 - Team: Dezerv Platform Engineering
