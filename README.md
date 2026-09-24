@@ -10,8 +10,8 @@ Skills that walk partners through setting up the Portfolio Tracker SDK on Androi
 
 | Skill | Platform | What it covers |
 |-------|----------|----------------|
-| `portfolio-tracker-android-setup` | Android | Gradle, permissions, partner auth token, `partnerUserMeta`, `DezervSDKView`, Builder/`show()`, warmup, events |
-| `portfolio-tracker-ios-setup` | iOS | SPM, Face ID, partner auth token, `partnerUserMeta`, `DezervSDK.Builder`, `DezervSDKView`, warmup, events |
+| `portfolio-tracker-android-setup` | Android | Gradle, permissions, partner auth token, `partnerUserMeta`, `DezervSDKView`, Builder/`show()`, warmup, events, project-aware locate & validate |
+| `portfolio-tracker-ios-setup` | iOS | SPM, Face ID, partner auth token, `partnerUserMeta`, `DezervSDK.Builder`, `DezervSDKView`, warmup, events, project-aware locate & validate |
 
 Full API reference: [Portfolio Tracker SDK Docs](https://dezerv.github.io/portfolio-tracker-sdk-docs/)
 
@@ -58,11 +58,23 @@ gh skill update --all
 
 ```
 skills/
-  portfolio-tracker-android-setup/SKILL.md
-  portfolio-tracker-ios-setup/SKILL.md
+  portfolio-tracker-android-setup/
+    SKILL.md                          # Core setup instructions
+    references/
+      user-meta-fields.md            # partnerUserMeta field table (loaded on demand)
+      troubleshooting.md             # Symptom → fix lookup (loaded on demand)
+    scripts/
+      validate-integration.sh        # Automated integration checks (8 checks)
+  portfolio-tracker-ios-setup/
+    SKILL.md                          # Core setup instructions
+    references/
+      user-meta-fields.md            # partnerUserMeta field table (loaded on demand)
+      troubleshooting.md             # Symptom → fix lookup (loaded on demand)
+    scripts/
+      validate-integration.sh        # Automated integration checks (7 checks)
 ```
 
-Matches the `skills/*/SKILL.md` convention that `gh skill` discovers automatically.
+Matches the `skills/*/SKILL.md` convention that `gh skill` discovers automatically. Reference files use progressive disclosure — the agent loads them only when needed, keeping the core skill under 500 lines.
 
 ## Maintainers
 
