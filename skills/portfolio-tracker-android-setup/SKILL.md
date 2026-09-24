@@ -270,41 +270,20 @@ Key requirements:
 5. `partnerAuthToken` must come from the partner backend — use `"PARTNER_AUTH_TOKEN"` as placeholder.
 6. Read `references/user-meta-fields.md` for required `partnerUserMeta` fields.
 
-### How to launch the SDK Activity
+## Step 6b: Wire up the SDK launch
 
-After creating the Activity, show the partner how to open it. Add these examples as a comment at the bottom of the generated Activity file:
+After creating the Activity, ask the user:
 
-**From another Activity (Intent):**
-```kotlin
-// startActivity(Intent(this, PortfolioActivity::class.java))
-```
+> "How would you like to open the Portfolio Tracker — from a **button in a Composable**, an **existing Activity**, a **Fragment**, or via **Jetpack Navigation**?"
 
-**From a Composable (most common for Compose apps):**
-```kotlin
-// val context = LocalContext.current
-// Button(onClick = {
-//     context.startActivity(Intent(context, PortfolioActivity::class.java))
-// }) {
-//     Text("Open Portfolio")
-// }
-```
+Then wire it into the partner's existing code based on their answer:
 
-**From a Fragment:**
-```kotlin
-// startActivity(Intent(requireContext(), PortfolioActivity::class.java))
-```
+- **Composable button** (most common for Compose apps): Add a `Button` with `context.startActivity(Intent(context, PortfolioActivity::class.java))` in the Composable they specify.
+- **From an Activity**: Add `startActivity(Intent(this, PortfolioActivity::class.java))` in the Activity method they specify.
+- **From a Fragment**: Add `startActivity(Intent(requireContext(), PortfolioActivity::class.java))` in the Fragment they specify.
+- **Jetpack Navigation**: Add an `activity` destination in their nav graph pointing to `PortfolioActivity::class`.
 
-**With Jetpack Navigation (nav graph):**
-```kotlin
-// // In your nav graph XML or Kotlin DSL:
-// activity("portfolio") {
-//     activityClass = PortfolioActivity::class
-// }
-// // Then navigate:
-// navController.navigate("portfolio")
-```
-
-Include these as commented-out examples at the bottom of the generated Activity file so the partner can uncomment the one that fits their app.
+Ask the user which **existing screen or Composable** should have the launch point, then modify that file directly.
 
 ### Fragments
 

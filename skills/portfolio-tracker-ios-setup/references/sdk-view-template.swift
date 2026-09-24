@@ -255,36 +255,6 @@ struct SDKContainerView: View {
 
 
 // =============================================================================
-// HOW TO LAUNCH THIS VIEW
-// Uncomment the pattern that matches your app's navigation:
-// =============================================================================
-//
-// --- Sheet (most common) ---
-// @State private var showPortfolio = false
-//
-// Button("Open Portfolio") { showPortfolio = true }
-// .sheet(isPresented: $showPortfolio) {
-//     PortfolioTrackerView()
-// }
-//
-// --- Full-screen cover ---
-// .fullScreenCover(isPresented: $showPortfolio) {
-//     PortfolioTrackerView()
-// }
-//
-// --- NavigationLink (push) ---
-// NavigationLink("Portfolio") {
-//     PortfolioTrackerView()
-// }
-//
-// --- Tab in TabView ---
-// TabView {
-//     PortfolioTrackerView()
-//         .tabItem { Label("Portfolio", systemImage: "chart.line.uptrend.xyaxis") }
-// }
-
-
-// =============================================================================
 // LOGOUT HANDLER
 // Call this when the partner user logs out of the host app.
 // Place in: wherever your app handles user logout (e.g. settings, auth manager)

@@ -221,44 +221,20 @@ Key requirements for the view:
 
 `DezervSDKView` also accepts a `theme` parameter: `DezervSDKView(theme: .dark)`.
 
-### How to launch the SDK view
+## Step 5b: Wire up the SDK launch
 
-After creating the container view, show the partner how to open it. Add one of these examples as a comment at the bottom of the generated file, matching the partner's navigation style:
+After creating the container view, ask the user:
 
-**Sheet (most common):**
-```swift
-// In your parent view:
-// @State private var showPortfolio = false
-//
-// Button("Open Portfolio") { showPortfolio = true }
-// .sheet(isPresented: $showPortfolio) {
-//     PortfolioTrackerView()  // or whatever the generated view is named
-// }
-```
+> "How would you like to open the Portfolio Tracker — as a **sheet**, **full-screen cover**, **navigation push**, or **tab**?"
 
-**Full-screen cover:**
-```swift
-// .fullScreenCover(isPresented: $showPortfolio) {
-//     PortfolioTrackerView()
-// }
-```
+Then wire it into the partner's existing view based on their answer:
 
-**NavigationLink (push):**
-```swift
-// NavigationLink("Portfolio") {
-//     PortfolioTrackerView()
-// }
-```
+- **Sheet**: Add `@State private var showPortfolio = false` and `.sheet(isPresented: $showPortfolio) { PortfolioTrackerView() }` to the parent view they specify.
+- **Full-screen cover**: Same state, use `.fullScreenCover(isPresented:)` instead.
+- **NavigationLink**: Add `NavigationLink("Portfolio") { PortfolioTrackerView() }` inside the partner's existing NavigationStack/NavigationView.
+- **Tab**: Add `PortfolioTrackerView().tabItem { Label("Portfolio", systemImage: "chart.line.uptrend.xyaxis") }` inside the partner's existing TabView.
 
-**Tab in TabView:**
-```swift
-// TabView {
-//     PortfolioTrackerView()
-//         .tabItem { Label("Portfolio", systemImage: "chart.line.uptrend.xyaxis") }
-// }
-```
-
-Include these as commented-out examples at the bottom of the generated file so the partner can uncomment the one that fits their app.
+Ask the user which **existing view or screen** should have the launch point, then modify that file directly.
 
 ### Observing errors reactively
 
