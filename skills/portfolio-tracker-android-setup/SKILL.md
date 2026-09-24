@@ -188,6 +188,8 @@ Add **inside** the `<manifest>` tag, **before** the `<application>` tag. Do not 
    ```
    Do **not** replace the `onCreate()` body — preserve existing code.
 
+   **Preprod setup:** If the user needs preprod, pass `DezervSDKEnvironment.PREPROD` here AND use a preprod-issued `partnerAuthToken` in `DezervSDKConfig`. They must match — a production token with a preprod warmup (or vice versa) will fail.
+
 ### If no custom Application class exists
 
 1. Create a new file in the same package as the main Activity:
@@ -265,13 +267,22 @@ Key requirements:
 
 Use `DezervViewType.TAB_VIEW`, cast `requireActivity()` to `FragmentActivity`, and clear the instance in `onDestroyView()`.
 
-### Logout
+## Step 7: Add logout handling
 
-When the partner user logs out of the host app:
+The partner's app must call `DezervSDK.logout()` when the user logs out of the host app. Find the partner's existing logout flow and add the SDK cleanup:
+
+```bash
+grep -rn "logout\|signOut\|sign_out\|logOut" --include="*.kt" --include="*.java" . | grep -v "/build/" | grep -v "DezervSDK"
+```
+
+In the partner's logout function, add:
 
 ```kotlin
+// Clear Dezerv SDK session data and cookies
 DezervSDK.logout()
 ```
+
+This is a **static method** — call it directly on `DezervSDK`, not on an instance.
 
 ## Required `partnerUserMeta` fields
 
@@ -359,6 +370,7 @@ The SDK automatically resizes its WebView when the soft keyboard opens. If you e
 - The Activity hosting `DezervSDKView` **must** extend `FragmentActivity` (or `AppCompatActivity`). If the agent creates a plain `Activity`, `Builder` will crash at runtime.
 - The SDK requires **Android 13 (API 33)+** at runtime. All SDK calls must be gated with `Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU`. Without this check, the app will crash on older devices.
 - Never hardcode real `partnerAuthToken` JWTs or PII (`phone`, `pan`) in source. Use placeholder values in code; fetch real tokens from the partner backend at runtime.
+- The environment in `DezervSDK.initialize()` and the `partnerAuthToken` in `DezervSDKConfig` must target the same environment (both production or both preprod). Mismatched environments cause auth failures or blank screens.
 
 ## Run validation
 

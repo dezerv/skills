@@ -192,6 +192,8 @@ Read the entry-point file found in Step 1c. Add the warmup call to the **existin
 
 **Do not** add warmup in both places. Pick whichever the project uses. `.integration` environment is Dezerv-internal only.
 
+**Preprod setup:** If the user needs preprod, pass `.preprod` in `initialize()` AND use a preprod-issued `partnerAuthToken` in `DezervSDKConfigParms`. They must match — a production token with a preprod warmup (or vice versa) will fail.
+
 ## Step 5: Create the SDK presentation view
 
 Create a new SwiftUI View file that handles Builder configuration and presents `DezervSDKView`. Place it following the project's file conventions (found in Step 1e). Read `references/sdk-view-template.swift` for the full reference implementation with event handling.
@@ -219,14 +221,27 @@ The container view is self-contained — the partner wires it into their navigat
 @StateObject private var sdk = DezervSDK.shared
 ```
 
-### Logout / dispose
+## Step 6: Add logout handling
 
-Call `dispose()` when the SDK UI is dismissed. Call `logout()` when the partner user signs out of the host app:
+The partner's app must call `DezervSDK.shared.logout()` when the user logs out of the host app. Find the partner's existing logout flow and add the SDK cleanup:
+
+```bash
+grep -rn "logout\|signOut\|sign_out\|logOut" --include="*.swift" . | grep -v "/build/" | grep -v "DezervSDK"
+```
+
+In the partner's logout function, add:
 
 ```swift
+// Clear Dezerv SDK session data and cookies
 DezervSDK.shared.logout()
+// Release SDK resources
 DezervSDK.shared.dispose()
 ```
+
+**`dispose()` vs `logout()`:**
+- `dispose()` — call when the SDK **view** is dismissed (frees resources, SDK can be re-shown later)
+- `logout()` — call when the **user** logs out of the host app (clears session data and cookies)
+- On user logout, call **both** in order: `logout()` then `dispose()`
 
 ## Required `partnerUserMeta` fields
 
@@ -287,6 +302,7 @@ Read `references/troubleshooting.md` if the build fails, the SDK shows a blank s
 - The agent may put `DezervSDK.Builder` in the `@main` App struct alongside warmup. Builder + view presentation belong in a separate View or ViewController, not in the app entry point.
 - `DezervSDK.shared` is a singleton — calling `initialize` more than once is a bug. If the agent adds warmup to both `AppDelegate` and a SwiftUI `@main` struct, one must be removed.
 - Never hardcode real `partnerAuthToken` JWTs or PII (`phone`, `pan`) in source. Use placeholder values in code; fetch real tokens from the partner backend at runtime.
+- The environment in `DezervSDK.shared.initialize()` and the `partnerAuthToken` in `DezervSDKConfigParms` must target the same environment (both production or both preprod). Mismatched environments cause auth failures or blank screens.
 
 ## Run validation
 
