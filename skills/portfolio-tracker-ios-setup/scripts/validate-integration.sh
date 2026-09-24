@@ -26,11 +26,11 @@ fi
 
 # 2. Entry point exists
 echo "[2/7] App entry point"
-ENTRY_FILE=$(grep -rl "@main" --include="*.swift" . 2>/dev/null | head -1)
+ENTRY_FILE=$(grep -rl "@main" --include="*.swift" . 2>/dev/null | grep -v '\.build/' | head -1)
 if [ -n "$ENTRY_FILE" ]; then
   pass "Entry point found: $ENTRY_FILE"
 else
-  ENTRY_FILE=$(grep -rl "@UIApplicationMain" --include="*.swift" . 2>/dev/null | head -1)
+  ENTRY_FILE=$(grep -rl "@UIApplicationMain" --include="*.swift" . 2>/dev/null | grep -v '\.build/' | head -1)
   if [ -n "$ENTRY_FILE" ]; then
     pass "Entry point found (UIKit): $ENTRY_FILE"
   else
