@@ -185,8 +185,8 @@ class PortfolioActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // Event handler — only the events partners need to act on
-    // See docs: events.md for the full list including internal/diagnostic events
+    // Event handler — partner-facing events from docs/android/events.md
+    // Remaining cases fall through to else (internal/diagnostic events)
     // =========================================================================
     private fun handleSDKEvent(event: DezervSDKEvent, payload: JSONObject?) {
         lifecycleScope.launch {
@@ -242,8 +242,35 @@ class PortfolioActivity : AppCompatActivity() {
                     Log.d("DezervSDK", "Theme changed to: $theme")
                 }
 
+                DezervSDKEvent.dataShare -> {
+                    // SDK is sharing data with the host app — structure varies by use case
+                    Log.d("DezervSDK", "DataShare: $payload")
+                    // TODO: Process or display shared data in your app
+                }
+
+                DezervSDKEvent.custom -> {
+                    // Extensibility hook — payload shape depends on your SDK/WebView contract
+                    val customEvent = payload?.optJSONObject("event")
+                    Log.d("DezervSDK", "Custom: $customEvent")
+                    // TODO: Handle custom event based on your integration
+                }
+
+                DezervSDKEvent.error -> {
+                    // Catch-all operational error during SDK runtime
+                    // Codes: sdk_error | network_error | unknown_error
+                    val message = payload?.optString("message")
+                    val code = payload?.optString("code")
+                    val error = payload?.optString("error")
+                    Log.e("DezervSDK", "Error: message=$message code=$code error=$error")
+                }
+
+                DezervSDKEvent.unsupported -> {
+                    // WebView sent an unrecognized event type — log for diagnostics
+                    Log.w("DezervSDK", "Unsupported event payload: $payload")
+                }
+
                 else -> {
-                    // Other events (dataShare, error, custom, etc.) — log for debugging
+                    // Internal/diagnostic events (sdkData, interceptParentScroll, etc.)
                     Log.d("DezervSDK", "Event: $event, payload: $payload")
                 }
             }

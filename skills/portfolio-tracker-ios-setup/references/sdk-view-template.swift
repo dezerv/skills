@@ -179,12 +179,8 @@ struct SDKContainerView: View {
     }
 
     // =========================================================================
-    // Event handler — responds to SDK lifecycle and user interaction events
-    // See docs: events.md for full event reference
-    // =========================================================================
-    // =========================================================================
-    // Event handler — only the events partners need to act on
-    // See docs: events.md for the full list including internal/diagnostic events
+    // Event handler — partner-facing events from docs/ios/events.md
+    // Remaining cases fall through to default (internal/diagnostic events)
     // =========================================================================
     private func handleSDKEvent(_ event: DezervSDKEvent, payload: [String: Any]?) {
         switch event {
@@ -245,8 +241,27 @@ struct SDKContainerView: View {
             let theme = payload?["theme"] as? String ?? ""  // "dark" or "light"
             print("DezervSDK: theme changed to \(theme)")
 
+        case .dataShare:
+            // SDK is sharing data with the host app — structure varies by use case
+            if let sharedData = payload {
+                print("DezervSDK: dataShare — \(sharedData)")
+                // TODO: Process or display shared data in your app
+            }
+
+        case .error:
+            // Catch-all operational error during SDK runtime
+            // Codes: sdk_error | network_error | unknown_error
+            let message = payload?["message"] as? String
+            let code = payload?["code"] as? String
+            let error = payload?["error"] as? String ?? "unknown"
+            print("DezervSDK: error — message=\(message ?? "") code=\(code ?? "") error=\(error)")
+
+        case .unknown:
+            // WebView sent an unrecognized event type — log for diagnostics
+            print("DezervSDK: unknown event payload — \(payload ?? [:])")
+
         default:
-            // Other events (dataShare, error, custom, OTP, etc.) — log for debugging
+            // Internal/diagnostic events (sdkData, interceptParentScroll, OTP, etc.)
             print("DezervSDK: \(event) — \(payload ?? [:])")
         }
     }
