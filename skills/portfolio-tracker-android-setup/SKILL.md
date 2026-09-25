@@ -248,7 +248,12 @@ Create a new layout file (e.g. `activity_portfolio.xml`) with the SDK view as th
 
 ## Step 6: Build config, bind view, show
 
-Read the hosting Activity file. Then modify it to add the SDK setup. Read `references/activity-template.kt` for the full reference implementation with event handling.
+Create **two** pieces. Read `references/activity-template.kt` for the full reference.
+
+1. **`DezervSDKConfigurator`** — SDK wiring only (no Activity UI). Builds `DezervSDKConfig` / `partnerUserMeta`, calls `DezervSDK.Builder`, and owns the message/event listener.
+2. **`PortfolioActivity`** (or Fragment) — thin host only. Inflates the layout, finds `DezervSDKView`, calls `DezervSDKConfigurator.attach(...)`, then `.show()`.
+
+Read the hosting Activity file if modifying an existing one. Prefer extracting the configurator rather than dumping Builder + events into `onCreate`.
 
 **IMPORTANT — the generated code must include:**
 - All inline comments from the template explaining what each field/event does.
@@ -260,15 +265,15 @@ Do not strip comments, optional fields, or TODOs to "clean up" the code.
 Key requirements:
 
 1. Add SDK imports alongside existing imports.
-2. Add a `private var dezervSDKInstance: DezervSDK? = null` property.
-3. Inside `onCreate()`, **after** `setContentView(...)` and any existing setup code, append the SDK configuration:
+2. Host keeps `private var dezervSDKInstance: DezervSDK? = null`.
+3. Inside `onCreate()`, **after** `setContentView(...)` and any existing setup code, call the configurator:
    - Gate with `Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU`.
    - Find the view: `findViewById<DezervSDKView>(R.id.dezervSDKView)`.
-   - Build config with `DezervSDKConfig(partnerAuthToken, partnerUserMeta, theme, viewType, isDebug)`.
-   - Build and show: `DezervSDK.Builder(this).setConfig(config).withView(view).withMessageListener { ... }.build()` then `.show()`.
+   - `DezervSDKConfigurator.attach(activity, sdkView, viewType, callbacks)` then `.show()`.
 4. In `onDestroy()`, null out the instance.
 5. `partnerAuthToken` must come from the partner backend — use `"PARTNER_AUTH_TOKEN"` as placeholder.
 6. Read `references/user-meta-fields.md` for required `partnerUserMeta` fields.
+7. Use `DezervViewType.FULL_VIEW` for a dedicated Activity; `TAB_VIEW` for Fragment / tab embedding.
 
 ## Step 6b: Wire up the SDK launch
 
@@ -287,7 +292,7 @@ Ask the user which **existing screen or Composable** should have the launch poin
 
 ### Fragments
 
-Use `DezervViewType.TAB_VIEW`, cast `requireActivity()` to `FragmentActivity`, and clear the instance in `onDestroyView()`.
+Use `DezervViewType.TAB_VIEW`, cast `requireActivity()` to `FragmentActivity`, call `DezervSDKConfigurator.attach(...)`, and clear the instance in `onDestroyView()`.
 
 ## Step 7: Add logout handling
 
@@ -341,13 +346,13 @@ After writing code, verify correct placement:
    grep -rn "DezervSDKView" --include="*.xml" .
    grep -rn "setContentView\|R.layout" --include="*.kt" --include="*.java" . | grep -i "portfolio\|dezerv\|sdk"
    ```
-   The layout containing `DezervSDKView` must be the one inflated by the Activity that calls `Builder` + `show()`.
+   The layout containing `DezervSDKView` must be the one inflated by the Activity that calls `DezervSDKConfigurator.attach` + `show()`.
 
-4. **Builder + show() are in an Activity/Fragment, not the Application class**:
+4. **Configurator + show() are in an Activity/Fragment, not the Application class**:
    ```bash
-   grep -rn "DezervSDK.Builder\|\.show()" --include="*.kt" --include="*.java" .
+   grep -rn "DezervSDKConfigurator\|DezervSDK.Builder\|\.show()" --include="*.kt" --include="*.java" .
    ```
-   These should be in the hosting Activity or Fragment, never in `Application.onCreate()`.
+   Builder belongs in the configurator; `show()` belongs in the thin host Activity/Fragment — never in `Application.onCreate()`.
 
 5. **No duplicate SDK views** — only one `DezervSDKView` per screen:
    ```bash
@@ -387,7 +392,7 @@ The SDK automatically resizes its WebView when the soft keyboard opens. If you e
 - The agent may try to create a `PortfolioTrackerSDK(username, password)` or similar init — **this API does not exist**. The only init path is `DezervSDK.initialize` (warmup) + `DezervSDK.Builder(activity)` + `DezervSDKConfig`. If the agent invents a different API shape, it's hallucinating.
 - The agent may consider the Gradle dependency as "done" — it's not. The SDK does nothing until `Builder` + `withView` + `show()` are called with a configured `DezervSDKConfig`. Adding the dependency is step 1 of 5.
 - `DezervSDKEnvironment.INTEGRATION` exists in the enum but is **Dezerv-internal only**. Never suggest it for partner apps — only `PRODUCTION` or `PREPROD`.
-- The agent may put `DezervSDK.Builder` in the `Application.onCreate()` alongside warmup. Builder + `show()` belong in an Activity or Fragment, not in the Application class.
+- The agent may put `DezervSDK.Builder` in the `Application.onCreate()` alongside warmup. Builder belongs in `DezervSDKConfigurator`; `show()` belongs in an Activity or Fragment — not in the Application class.
 - `DezervSDK.initialize` should be called **exactly once** in `Application.onCreate()`. If the agent also adds it to an Activity, remove the duplicate.
 - The Activity hosting `DezervSDKView` **must** extend `FragmentActivity` (or `AppCompatActivity`). If the agent creates a plain `Activity`, `Builder` will crash at runtime.
 - The SDK requires **Android 13 (API 33)+** at runtime. All SDK calls must be gated with `Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU`. Without this check, the app will crash on older devices.

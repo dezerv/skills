@@ -94,7 +94,7 @@ ls -d */ || ls
 find . -name "*.swift" -not -path "*/build/*" -not -path "*/.build/*" -maxdepth 3 | head -20
 ```
 
-Observe where the partner keeps their view files (e.g. `Views/`, `Screens/`, `Features/`, or flat alongside the app). Create the SDK container view following the same convention. Do **not** ask the user where to present the SDK — the skill creates a standalone container view; how the partner surfaces it (tab, sheet, push) is their decision.
+Observe where the partner keeps their view files (e.g. `Views/`, `Screens/`, `Features/`, or flat alongside the app). Create the thin SDK host view (+ configurator) following the same convention. Do **not** ask the user where to present the SDK yet — that is Step 5b; the skill creates a standalone host with no launcher button.
 
 ## Step 2: Add the Swift package dependency
 
@@ -196,43 +196,49 @@ Read the entry-point file found in Step 1c. Add the warmup call to the **existin
 
 **Preprod setup:** If the user needs preprod, pass `.preprod` in `initialize()` AND use a preprod-issued `partnerAuthToken` in `DezervSDKConfigParms`. They must match — a production token with a preprod warmup (or vice versa) will fail.
 
-## Step 5: Create the SDK presentation view
+## Step 5: Create the SDK presentation layer
 
-Create a new SwiftUI View file that handles Builder configuration and presents `DezervSDKView`. Place it following the project's file conventions (found in Step 1e). Read `references/sdk-view-template.swift` for the full reference implementation with event handling.
+Create **two** pieces following the project's file conventions (found in Step 1e). Read `references/sdk-view-template.swift` for the full reference.
+
+1. **`DezervSDKConfigurator`** — SDK wiring only (no SwiftUI). Builds `DezervSDKConfigParms`, calls `DezervSDK.Builder`, and owns the message/event listener.
+2. **`DezervPortfolioHostView`** — thin UI host only. Calls the configurator in `.task`, then presents `DezervSDKView()` on success (or an error message on failure).
+
+**Do not** put an "Open Portfolio" button inside the host view. How the partner surfaces the host (sheet / cover / push / tab) is Step 5b.
 
 **IMPORTANT — the generated code must include:**
 - All inline comments from the template explaining what each field/event does.
 - All optional `partnerUserMeta` fields as commented-out lines (phone, pan, deeplink, sdkMetrics, partner_section_name, partner_cta_copy, partner_cta_position, partner_medium, partner_keywords). Partners need to see what's available.
 - `// TODO:` markers on every line the partner must customize (auth token, session ID, partner ID, analytics forwarding, deeplink handling). These appear in Xcode's task navigator.
-- Wrap the entire file in `#if canImport(PortfolioTrackerSDK)` / `#endif` — prevents build errors if the package hasn't resolved yet.
+- Wrap SDK types in `#if canImport(PortfolioTrackerSDK)` / `#endif` — prevents build errors if the package hasn't resolved yet.
 
 Do not strip comments, optional fields, or TODOs to "clean up" the code.
 
-Key requirements for the view:
+Key requirements:
 
-1. `import PortfolioTrackerSDK` at the top.
-2. Build the SDK with `DezervSDK.Builder()` → `.setConfig(config)` → `.withMessageListener { ... }` → `.build()`.
+1. `import PortfolioTrackerSDK` at the top of both files (or the single file if the partner keeps them together).
+2. Configurator builds with `DezervSDK.Builder()` → `.setConfig(config)` → `.withMessageListener { ... }` → `.build()`.
 3. Config uses `DezervSDKConfigParms(partnerAuthToken:partnerUserMeta:theme:viewType:)`.
-4. On `.success`, present `DezervSDKView()`. On `.failure`, show the error.
-5. Handle the `.exit` event — call `DezervSDK.shared.dispose()` on dismissal.
-6. Handle the `.logout` event — call `DezervSDK.shared.logout()` then `dispose()`.
+4. Host presents `DezervSDKView()` only after configurator returns success; show the failure message otherwise.
+5. Handle `.exit` in the configurator — `dispose()` then invoke the host's dismiss callback.
+6. Handle `.logout` — `logout()` then `dispose()`, then invoke the host logout callback.
 7. `partnerAuthToken` must come from the partner backend, not hardcoded. Use `"PARTNER_AUTH_TOKEN"` as placeholder.
 8. Read `references/user-meta-fields.md` for required `partnerUserMeta` fields.
+9. Choose `viewType`: `.fullView` for sheet / push / cover; `.tabView` when embedding in a `TabView`.
 
 `DezervSDKView` also accepts a `theme` parameter: `DezervSDKView(theme: .dark)`.
 
 ## Step 5b: Wire up the SDK launch
 
-After creating the container view, ask the user:
+After creating the host view, ask the user:
 
 > "How would you like to open the Portfolio Tracker — as a **sheet**, **full-screen cover**, **navigation push**, or **tab**?"
 
 Then wire it into the partner's existing view based on their answer:
 
-- **Sheet**: Add `@State private var showPortfolio = false` and `.sheet(isPresented: $showPortfolio) { PortfolioTrackerView() }` to the parent view they specify.
+- **Sheet**: Add `@State private var showPortfolio = false` and `.sheet(isPresented: $showPortfolio) { DezervPortfolioHostView() }` to the parent view they specify.
 - **Full-screen cover**: Same state, use `.fullScreenCover(isPresented:)` instead.
-- **NavigationLink**: Add `NavigationLink("Portfolio") { PortfolioTrackerView() }` inside the partner's existing NavigationStack/NavigationView.
-- **Tab**: Add `PortfolioTrackerView().tabItem { Label("Portfolio", systemImage: "chart.line.uptrend.xyaxis") }` inside the partner's existing TabView.
+- **NavigationLink**: Add `NavigationLink("Portfolio") { DezervPortfolioHostView() }` inside the partner's existing NavigationStack/NavigationView.
+- **Tab**: Add `DezervPortfolioHostView().tabItem { Label("Portfolio", systemImage: "chart.line.uptrend.xyaxis") }` inside the partner's existing TabView — and set configurator `viewType: .tabView`.
 
 Ask the user which **existing view or screen** should have the launch point, then modify that file directly.
 
@@ -295,12 +301,12 @@ After writing code, verify correct placement:
    grep -rn "import PortfolioTrackerSDK" --include="*.swift" .
    ```
 
-3. **Builder + DezervSDKView are in a presentation context** — not in the `@main` App struct:
+3. **Configurator + DezervSDKView are in a presentation context** — not in the `@main` App struct:
    ```bash
-   grep -rn "DezervSDK.Builder" --include="*.swift" .
+   grep -rn "DezervSDKConfigurator\|DezervSDK.Builder" --include="*.swift" .
    grep -rn "DezervSDKView()" --include="*.swift" .
    ```
-   Both should be in a View or ViewController, not in the app entry point.
+   Builder belongs in the configurator; `DezervSDKView` belongs in the thin host. Neither belongs in the app entry point.
 
 4. **dispose() is called on dismissal** — confirm cleanup exists:
    ```bash
@@ -322,7 +328,8 @@ Read `references/troubleshooting.md` if the build fails, the SDK shows a blank s
 - The agent may try to create a `PortfolioTrackerSDK(Configuration(apiUsername:…))` or similar username/password init — **this API does not exist**. The only init path is `DezervSDK.shared` (singleton) + `DezervSDK.Builder()` + `DezervSDKConfigParms`. If the agent invents a different API shape, it's hallucinating.
 - The agent may consider SPM install as "done" — it's not. The SDK does nothing until `setConfig` + `build` returns `.success` and `DezervSDKView` is presented. Adding the package dependency is step 1 of 4.
 - `.integration` environment exists in the SDK enum but is **Dezerv-internal only**. Never suggest it for partner apps — only `.production` or `.preprod`.
-- The agent may put `DezervSDK.Builder` in the `@main` App struct alongside warmup. Builder + view presentation belong in a separate View or ViewController, not in the app entry point.
+- The agent may put `DezervSDK.Builder` in the `@main` App struct alongside warmup. Builder belongs in `DezervSDKConfigurator`; view presentation belongs in `DezervPortfolioHostView` — not in the app entry point.
+- The agent may put an "Open Portfolio" button inside the host view. Do **not** — launch wiring is Step 5b in the parent view.
 - `DezervSDK.shared` is a singleton — calling `initialize` more than once is a bug. If the agent adds warmup to both `AppDelegate` and a SwiftUI `@main` struct, one must be removed.
 - Never hardcode real `partnerAuthToken` JWTs or PII (`phone`, `pan`) in source. Use placeholder values in code; fetch real tokens from the partner backend at runtime.
 - The environment in `DezervSDK.shared.initialize()` and the `partnerAuthToken` in `DezervSDKConfigParms` must target the same environment (both production or both preprod). Mismatched environments cause auth failures or blank screens.

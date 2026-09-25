@@ -2,15 +2,19 @@
 // Reference implementation for the Dezerv Portfolio Tracker SDK — iOS
 // Adapt to the partner's existing project — do not copy verbatim.
 //
-// Architecture:
+// Architecture (UI and SDK wiring are separated):
 //   - DezervSDK.shared.initialize() → @main App struct init() ONLY (one-time warmup)
-//   - DezervSDK.Builder()           → SwiftUI View (presentation layer)
+//   - DezervSDKConfigurator         → config, Builder, event handling (no UI)
+//   - DezervPortfolioHostView       → thin SwiftUI host that presents DezervSDKView
 //   - DezervSDK.shared.logout()     → When the partner user logs out of the host app
 //   - DezervSDK.shared.dispose()    → When the SDK UI is dismissed
 //
 // The SDK is a SINGLETON (DezervSDK.shared). initialize() must be called
 // exactly ONCE at app start. Builder + DezervSDKView is used each time
 // the SDK UI needs to be presented.
+//
+// How partners present this host (sheet / fullScreenCover / NavigationLink / tab)
+// is decided in SKILL Step 5b — this file does NOT include a launcher button.
 // =============================================================================
 
 
@@ -45,59 +49,89 @@
 // }
 
 
-// =============================================================================
-// SDK CONTAINER VIEW — presentation layer with Builder + event handling
-// Create as: a new SwiftUI View file in the partner's Views/ directory
-// Wrap in #if canImport so the project builds even if the package hasn't resolved
-// =============================================================================
-
 #if canImport(PortfolioTrackerSDK)
 import SwiftUI
 import PortfolioTrackerSDK
 
-struct SDKContainerView: View {
-    // DezervSDK.shared.error is @Published — observe it reactively
-    @StateObject private var sdk = DezervSDK.shared
+// =============================================================================
+// FILE 1: DezervSDKConfigurator — SDK wiring only (no SwiftUI)
+// Place in: same module as the host view (e.g. Services/ or Features/Portfolio/)
+// =============================================================================
 
-    @State private var isLoading = false
-    @State private var showSDK = false
-    @State private var errorMessage: String?
+/// Builds SDK config, attaches the message listener, and owns event handling.
+/// Keep this free of View types so UI and integration logic stay separate.
+enum DezervSDKConfigurator {
 
-    var body: some View {
-        VStack {
-            if isLoading {
-                ProgressView("Configuring SDK...")
-            } else if let errorMessage {
-                Text(errorMessage).foregroundColor(.red)
-            } else if showSDK {
-                // DezervSDKView renders the SDK WebView
-                // Pass theme to override: DezervSDKView(theme: .dark)
-                DezervSDKView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    /// Result of attaching the SDK for presentation.
+    enum AttachResult {
+        case success
+        case failure(message: String)
+    }
+
+    /// Callbacks the thin host (or navigation layer) must implement.
+    struct HostCallbacks {
+        /// Called on normal `.exit` — dismiss the host (sheet/push/tab).
+        var onDismiss: () -> Void
+        /// Called when `.exit` includes `errorCode == "sdk_error"` — refresh token and re-attach.
+        var onReinitialize: () -> Void
+        /// Called on `.logout` after SDK session is cleared — also clear the host app session.
+        var onHostLogout: () -> Void
+    }
+
+    // -------------------------------------------------------------------------
+    // Public entry — call from the host view's `.task` / `onAppear`
+    // -------------------------------------------------------------------------
+
+    /// Configures `DezervSDK.Builder` and registers the event listener.
+    /// On success the host should present `DezervSDKView()`.
+    @discardableResult
+    static func attach(callbacks: HostCallbacks) -> AttachResult {
+        let authToken = "PARTNER_AUTH_TOKEN" // TODO: Replace with your backend's /auth/token response
+
+        let config = DezervSDKConfigParms(
+            partnerAuthToken: authToken,
+            partnerUserMeta: buildUserMeta(),
+
+            // Theme — .light or .dark
+            theme: .light,
+
+            // View type:
+            //   .fullView = full-screen standalone SDK view (default for sheet / push / cover)
+            //   .tabView  = embedded/nested view for tab-based navigation
+            // Match this to how the partner presents DezervPortfolioHostView.
+            viewType: .fullView
+
+            // ⚠️ PREPROD SETUP: If targeting preprod, you must change BOTH:
+            //   1. DezervSDK.shared.initialize() in @main: environment: .preprod
+            //   2. This config: use a preprod-issued partnerAuthToken
+            //   Mismatched environments will cause auth failures or blank screens
+        )
+
+        let result = DezervSDK.Builder()
+            .setConfig(config)
+            .withMessageListener { event, payload in
+                handleSDKEvent(event, payload: payload, callbacks: callbacks)
             }
+            .build()
 
-            if !showSDK && !isLoading {
-                Button("Open Portfolio") {
-                    configureAndShowSDK()
-                }
-            }
+        switch result {
+        case .success:
+            return .success
+        case .failure(let error):
+            // error.code — error code string (e.g. "sdk_error")
+            // error.message — human-readable description
+            // error.underlyingError — optional underlying system error
+            return .failure(message: error.message)
         }
     }
 
-    private func configureAndShowSDK() {
-        isLoading = true
-        errorMessage = nil
+    // -------------------------------------------------------------------------
+    // User metadata — personalization + session + attribution
+    // See references/user-meta-fields.md for the full field table
+    // -------------------------------------------------------------------------
 
-        // =====================================================================
-        // 1. Auth token — MUST come from the partner backend, never hardcoded
-        // =====================================================================
-        let authToken = "PARTNER_AUTH_TOKEN" // TODO: Replace with your backend's /auth/token response
-
-        // =====================================================================
-        // 2. User metadata — personalization + session + attribution fields
-        // See references/user-meta-fields.md for the full field table
-        // =====================================================================
-        let userMeta: [String: Any] = [
+    static func buildUserMeta() -> [String: Any] {
+        [
             // --- Session / analytics (required) ---
             "session_id": "REPLACE_SESSION_ID",             // TODO: Replace with unique session ID
             "schema_version": "2.0",                         // Always send "2.0"
@@ -129,60 +163,18 @@ struct SDKContainerView: View {
             // "partner_cta_position": "hero",               // hero | inline | sticky
             // "partner_medium": "app",                      // app | whatsapp
         ]
-
-        // =====================================================================
-        // 3. SDK configuration
-        // =====================================================================
-        let config = DezervSDKConfigParms(
-            partnerAuthToken: authToken,
-            partnerUserMeta: userMeta,
-
-            // Theme — .light or .dark
-            theme: .light,
-
-            // View type:
-            //   .fullView = full-screen standalone SDK view (default)
-            //   .tabView  = embedded/nested view for tab-based navigation
-            viewType: .fullView
-
-            // ⚠️ PREPROD SETUP: If targeting preprod, you must change BOTH:
-            //   1. DezervSDK.shared.initialize() in @main: environment: .preprod
-            //   2. This config: use a preprod-issued partnerAuthToken
-            //   Mismatched environments will cause auth failures or blank screens
-        )
-
-        // =====================================================================
-        // 4. Build the SDK instance
-        // =====================================================================
-        let result = DezervSDK.Builder()
-            .setConfig(config)                               // Required: SDK configuration
-            .withMessageListener { event, payload in          // Optional: Event listener
-                handleSDKEvent(event, payload: payload)
-            }
-            .build()                                         // Build the configured instance
-
-        // =====================================================================
-        // 5. Handle build result
-        // =====================================================================
-        DispatchQueue.main.async {
-            isLoading = false
-            switch result {
-            case .success:
-                showSDK = true
-            case .failure(let error):
-                // error.code — error code string (e.g. "sdk_error")
-                // error.message — human-readable description
-                // error.underlyingError — optional underlying system error
-                errorMessage = "SDK setup failed: \(error.message)"
-            }
-        }
     }
 
-    // =========================================================================
+    // -------------------------------------------------------------------------
     // Event handler — partner-facing events from docs/ios/events.md
     // Remaining cases fall through to default (internal/diagnostic events)
-    // =========================================================================
-    private func handleSDKEvent(_ event: DezervSDKEvent, payload: [String: Any]?) {
+    // -------------------------------------------------------------------------
+
+    private static func handleSDKEvent(
+        _ event: DezervSDKEvent,
+        payload: [String: Any]?,
+        callbacks: HostCallbacks
+    ) {
         switch event {
 
         case .sdkInitializationSuccess:
@@ -195,26 +187,28 @@ struct SDKContainerView: View {
             print("DezervSDK: init failed — \(error)")
 
         case .exit:
-            // ACTION REQUIRED: dismiss the SDK view
+            // ACTION REQUIRED: dismiss the SDK host
             if let errorCode = payload?["errorCode"] as? String,
                errorCode == "sdk_error" {
                 // SDK-side error — fetch a fresh auth token and re-configure
                 print("DezervSDK: exit with sdk_error — re-init with new token")
-            } else {
-                // Normal exit — dismiss UI and release SDK resources
                 DispatchQueue.main.async {
-                    showSDK = false
+                    callbacks.onReinitialize()
+                }
+            } else {
+                // Normal exit — release SDK resources, then dismiss host UI
+                DispatchQueue.main.async {
                     DezervSDK.shared.dispose()
+                    callbacks.onDismiss()
                 }
             }
 
         case .logout:
             // ACTION REQUIRED: user logged out inside the SDK
-            // Clear SDK state, then clear your app's session too
             DispatchQueue.main.async {
                 DezervSDK.shared.logout()   // Clears SDK session data
                 DezervSDK.shared.dispose()  // Releases SDK resources
-                // TODO: Also clear your app's own auth session
+                callbacks.onHostLogout()    // TODO: Also clear your app's own auth session
             }
 
         case .userAuth:
@@ -263,6 +257,76 @@ struct SDKContainerView: View {
         default:
             // Internal/diagnostic events (sdkData, interceptParentScroll, OTP, etc.)
             print("DezervSDK: \(event) — \(payload ?? [:])")
+        }
+    }
+}
+
+
+// =============================================================================
+// FILE 2: DezervPortfolioHostView — thin UI host only
+// Create as: a new SwiftUI View file in the partner's Views/ directory
+// Presents DezervSDKView after DezervSDKConfigurator.attach succeeds.
+// No launcher button — the parent decides sheet / push / tab / cover.
+// =============================================================================
+
+/// Presentation phases for the thin SDK host.
+enum DezervPortfolioHostPhase: Equatable {
+    case loading
+    case ready
+    case failed(String)
+}
+
+struct DezervPortfolioHostView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var phase: DezervPortfolioHostPhase = .loading
+
+    var body: some View {
+        Group {
+            switch phase {
+            case .loading:
+                ProgressView("Configuring SDK...")
+
+            case .ready:
+                // DezervSDKView renders the SDK WebView
+                // Pass theme to override: DezervSDKView(theme: .dark)
+                DezervSDKView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            case .failed(let message):
+                Text(message)
+                    .foregroundColor(.red)
+                    .padding()
+            }
+        }
+        .task {
+            attachSDK()
+        }
+    }
+
+    /// Wires Builder via the configurator, then flips phase for UI only.
+    private func attachSDK() {
+        phase = .loading
+
+        let callbacks = DezervSDKConfigurator.HostCallbacks(
+            onDismiss: {
+                dismiss()
+            },
+            onReinitialize: {
+                // Fetch a fresh partnerAuthToken, then attach again
+                attachSDK()
+            },
+            onHostLogout: {
+                // TODO: Clear your app's own auth session
+                dismiss()
+            }
+        )
+
+        switch DezervSDKConfigurator.attach(callbacks: callbacks) {
+        case .success:
+            phase = .ready
+        case .failure(let message):
+            phase = .failed("SDK setup failed: \(message)")
         }
     }
 }
