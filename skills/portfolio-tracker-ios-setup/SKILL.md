@@ -168,40 +168,47 @@ Do **not** add local-network / Bonjour keys unless the partner has a separate re
 
 Read the entry-point file found in Step 1c. Add the warmup call to the **existing** `init()` — do not replace the struct or remove existing code.
 
+**Docs reference:** [iOS usage — Environment Management](https://dezerv.github.io/portfolio-tracker-sdk-docs/docs/ios/usage) — `environment` is passed **only** to `DezervSDK.shared.initialize(environment:)`. It is **not** a field on `DezervSDKConfigParms`.
+
+**IMPORTANT — root/entry file comments are mandatory.** When patching `@main` / `AppDelegate`, copy the explanatory comments from `references/sdk-view-template.swift` (warmup section). Do **not** add a bare `initialize` line with no comments.
+
+**Always the same:**
+1. `DezervPartnerSDKSettings.environment` passed to `initialize(environment:)`
+2. `partnerAuthToken` issued for that same environment
+3. `theme` / `viewType` on warmup aligned with `DezervSDKConfigParms` (docs best practice)
+
 ### SwiftUI (`@main` struct)
 
 1. Add `import PortfolioTrackerSDK` alongside the existing imports.
-2. Inside the existing `init()`, append this line (after any existing init code):
+2. Ensure `DezervPartnerSDKSettings` exists (Step 5) before or when wiring warmup.
+3. Inside the existing `init()`, append **with comments** (docs shape):
    ```swift
-   DezervSDK.shared.initialize(environment: .production) // or .preprod
+   // Pre-warm SDK during app launch (docs: Early Warmup).
+   // environment is ESSENTIAL for warmup pre-load — pass only here, not on DezervSDKConfigParms.
+   // Allowed: .production or .preprod (.integration is Dezerv-internal only).
+   // ⚠️ partnerAuthToken must be issued for this same environment.
+   DezervSDK.shared.initialize(
+       environment: DezervPartnerSDKSettings.environment  // .production or .preprod
+   )
    ```
-3. If no `init()` exists, create one — but preserve all existing properties and the `body`:
-   ```swift
-   init() {
-       // ... keep any existing init code above ...
-       DezervSDK.shared.initialize(environment: .production)
-   }
-   ```
+4. If no `init()` exists, create one — but preserve all existing properties and the `body`.
 
 ### UIKit (`AppDelegate`)
 
 1. Add `import PortfolioTrackerSDK` alongside the existing imports.
-2. Inside the existing `application(_:didFinishLaunchingWithOptions:)`, append:
-   ```swift
-   DezervSDK.shared.initialize(environment: .production)
-   ```
-   before `return true`. Do not replace the method body.
+2. Inside the existing `application(_:didFinishLaunchingWithOptions:)`, append the **same commented block** as above before `return true`. Do not replace the method body.
 
-**Do not** add warmup in both places. Pick whichever the project uses. `.integration` environment is Dezerv-internal only.
+**Do not** add warmup in both places. Pick whichever the project uses.
 
-**Preprod setup:** If the user needs preprod, pass `.preprod` in `initialize()` AND use a preprod-issued `partnerAuthToken` in `DezervSDKConfigParms`. They must match — a production token with a preprod warmup (or vice versa) will fail.
+**Preprod setup:** Set `DezervPartnerSDKSettings.environment = .preprod` **once**, then use a preprod-issued `partnerAuthToken`. Both stay in sync.
 
 ## Step 5: Create the SDK presentation layer
 
 Create **two** pieces following the project's file conventions (found in Step 1e). Read `references/sdk-view-template.swift` for the full reference.
 
-1. **`DezervSDKConfigurator`** — SDK wiring only (no SwiftUI). Builds `DezervSDKConfigParms`, calls `DezervSDK.Builder`, and owns the message/event listener.
-2. **`DezervPortfolioHostView`** — thin UI host only. Calls the configurator in `.task`, then presents `DezervSDKView()` on success (or an error message on failure).
+1. **`DezervPartnerSDKSettings`** — single `environment`, `theme`, and `viewType` (docs alignment).
+2. **`DezervSDKConfigurator`** — SDK wiring only (no SwiftUI). Builds `DezervSDKConfigParms` per docs (`partnerAuthToken`, `partnerUserMeta`, `theme`, `viewType` — **no environment field**), calls `DezervSDK.Builder`, owns events.
+3. **`DezervPortfolioHostView`** — thin UI host only. Calls the configurator in `.task`, then presents `DezervSDKView()` on success (or an error message on failure).
 
 **Do not** put an "Open Portfolio" button inside the host view. How the partner surfaces the host (sheet / cover / push / tab) is Step 5b.
 
@@ -210,20 +217,21 @@ Create **two** pieces following the project's file conventions (found in Step 1e
 - All optional `partnerUserMeta` fields as commented-out lines (phone, pan, deeplink, sdkMetrics, partner_section_name, partner_cta_copy, partner_cta_position, partner_medium, partner_keywords). Partners need to see what's available.
 - `// TODO:` markers on every line the partner must customize (auth token, session ID, partner ID, analytics forwarding, deeplink handling). These appear in Xcode's task navigator.
 - Wrap SDK types in `#if canImport(PortfolioTrackerSDK)` / `#endif` — prevents build errors if the package hasn't resolved yet.
+- Docs rule: `environment` only on `initialize()`; config theme/viewType from `DezervPartnerSDKSettings`; auth token for that same environment.
 
 Do not strip comments, optional fields, or TODOs to "clean up" the code.
 
 Key requirements:
 
 1. `import PortfolioTrackerSDK` at the top of both files (or the single file if the partner keeps them together).
-2. Configurator builds with `DezervSDK.Builder()` → `.setConfig(config)` → `.withMessageListener { ... }` → `.build()`.
-3. Config uses `DezervSDKConfigParms(partnerAuthToken:partnerUserMeta:theme:viewType:)`.
+2. Configurator builds with `DezervSDK.Builder()` → `.setConfig(config)` → `.withMessageListener { ... }` → `.build()` (docs Builder Methods).
+3. Config uses `DezervSDKConfigParms(partnerAuthToken:partnerUserMeta:theme:viewType:)` — **do not** invent an `environment:` parameter on this struct.
 4. Host presents `DezervSDKView()` only after configurator returns success; show the failure message otherwise.
 5. Handle `.exit` in the configurator — `dispose()` then invoke the host's dismiss callback.
 6. Handle `.logout` — `logout()` then `dispose()`, then invoke the host logout callback.
-7. `partnerAuthToken` must come from the partner backend, not hardcoded. Use `"PARTNER_AUTH_TOKEN"` as placeholder.
+7. `partnerAuthToken` must come from the partner backend for **the same** environment as `DezervPartnerSDKSettings.environment`. Use `"PARTNER_AUTH_TOKEN"` as placeholder.
 8. Read `references/user-meta-fields.md` for required `partnerUserMeta` fields.
-9. Choose `viewType`: `.fullView` for sheet / push / cover; `.tabView` when embedding in a `TabView`.
+9. Choose `viewType` via settings: `.fullView` for sheet / push / cover; `.tabView` when embedding in a `TabView`.
 
 `DezervSDKView` also accepts a `theme` parameter: `DezervSDKView(theme: .dark)`.
 
@@ -332,7 +340,9 @@ Read `references/troubleshooting.md` if the build fails, the SDK shows a blank s
 - The agent may put an "Open Portfolio" button inside the host view. Do **not** — launch wiring is Step 5b in the parent view.
 - `DezervSDK.shared` is a singleton — calling `initialize` more than once is a bug. If the agent adds warmup to both `AppDelegate` and a SwiftUI `@main` struct, one must be removed.
 - Never hardcode real `partnerAuthToken` JWTs or PII (`phone`, `pan`) in source. Use placeholder values in code; fetch real tokens from the partner backend at runtime.
-- The environment in `DezervSDK.shared.initialize()` and the `partnerAuthToken` in `DezervSDKConfigParms` must target the same environment (both production or both preprod). Mismatched environments cause auth failures or blank screens.
+- The `environment` for `DezervSDK.shared.initialize(environment:)` and the `partnerAuthToken` must **always** be the same (`DezervPartnerSDKSettings.environment`). Theme/viewType on config must match warmup. Docs: environment is **not** on `DezervSDKConfigParms`.
+- When patching the root `@main` / AppDelegate file, **always** include the warmup comments from the template — never a bare `initialize` line.
+- Do **not** call `setCurrentEnvironment` in partner skills — docs recommend passing environment only via `initialize(environment:)`.
 
 ## Run validation
 

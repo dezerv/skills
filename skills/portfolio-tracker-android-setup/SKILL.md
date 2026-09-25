@@ -172,54 +172,35 @@ Add **inside** the `<manifest>` tag, **before** the `<application>` tag. Do not 
    import `in`.dezerv.portfolio_tracker_sdk.core.DezervViewType
    ```
 
-2. Inside the existing `onCreate()`, **append** after `super.onCreate()` and any existing code:
+2. Ensure `DezervPartnerSDKSettings` exists (Step 6) — single source of truth for environment.
+
+3. Inside the existing `onCreate()`, **append** after `super.onCreate()` and any existing code — **with comments** (do not strip them). Docs shape from android/usage.md:
    ```kotlin
    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+       // Pre-warm SDK during app launch (docs: Early Warmup).
+       // environment is ESSENTIAL for warmup pre-load — only on InitConfig, not DezervSDKConfig.
+       // ⚠️ partnerAuthToken must be issued for this same environment.
+       // theme/viewType must match DezervSDKConfig later (docs: Match Themes).
        DezervSDK.initialize(
            context = this,
            dezervSDKInitConfig = DezervSDKInitConfig(
-               theme = DezervSDKTheme.light,
-               viewType = DezervViewType.FULL_VIEW,
+               theme = DezervPartnerSDKSettings.theme,
+               viewType = DezervPartnerSDKSettings.viewType,
                isDebug = BuildConfig.DEBUG,
-               environment = DezervSDKEnvironment.PRODUCTION
+               environment = DezervPartnerSDKSettings.environment // PRODUCTION or PREPROD
            )
        )
    }
    ```
    Do **not** replace the `onCreate()` body — preserve existing code.
 
-   **Preprod setup:** If the user needs preprod, pass `DezervSDKEnvironment.PREPROD` here AND use a preprod-issued `partnerAuthToken` in `DezervSDKConfig`. They must match — a production token with a preprod warmup (or vice versa) will fail.
+   **Always the same:** InitConfig `environment` + auth-token environment; InitConfig `theme`/`viewType` + `DezervSDKConfig` theme/viewType.
+
+   **Preprod setup:** Set `DezervPartnerSDKSettings.environment = DezervSDKEnvironment.PREPROD` **once**, then use a preprod-issued `partnerAuthToken`.
 
 ### If no custom Application class exists
 
-1. Create a new file in the same package as the main Activity:
-   ```kotlin
-   import android.app.Application
-   import android.os.Build
-   import `in`.dezerv.portfolio_tracker_sdk.DezervSDK
-   import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKEnvironment
-   import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKInitConfig
-   import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKTheme
-   import `in`.dezerv.portfolio_tracker_sdk.core.DezervViewType
-
-   class MyApplication : Application() {
-       override fun onCreate() {
-           super.onCreate()
-           if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-               DezervSDK.initialize(
-                   context = this,
-                   dezervSDKInitConfig = DezervSDKInitConfig(
-                       theme = DezervSDKTheme.light,
-                       viewType = DezervViewType.FULL_VIEW,
-                       isDebug = BuildConfig.DEBUG,
-                       environment = DezervSDKEnvironment.PRODUCTION
-                   )
-               )
-           }
-       }
-   }
-   ```
-   Use the partner's naming convention. Check existing classes for the package name.
+1. Create a new file in the same package as the main Activity, including `DezervPartnerSDKSettings` and the commented warmup block from `references/activity-template.kt` (FILE 1). Use the partner's naming convention.
 
 2. Register in `AndroidManifest.xml` — add `android:name` to the `<application>` tag:
    ```xml
@@ -250,15 +231,17 @@ Create a new layout file (e.g. `activity_portfolio.xml`) with the SDK view as th
 
 Create **two** pieces. Read `references/activity-template.kt` for the full reference.
 
-1. **`DezervSDKConfigurator`** — SDK wiring only (no Activity UI). Builds `DezervSDKConfig` / `partnerUserMeta`, calls `DezervSDK.Builder`, and owns the message/event listener.
-2. **`PortfolioActivity`** (or Fragment) — thin host only. Inflates the layout, finds `DezervSDKView`, calls `DezervSDKConfigurator.attach(...)`, then `.show()`.
+1. **`DezervPartnerSDKSettings`** — single `environment`, `theme`, `viewType` (docs alignment).
+2. **`DezervSDKConfigurator`** — SDK wiring only (no Activity UI). Builds `DezervSDKConfig` per docs (`partnerAuthToken`, `partnerUserMeta`, `theme`, `viewType`, `isDebug` — **no environment field**), calls `DezervSDK.Builder`, owns events. Auth token must be for `DezervPartnerSDKSettings.environment`.
+3. **`PortfolioActivity`** (or Fragment) — thin host only. Inflates the layout, finds `DezervSDKView`, calls `DezervSDKConfigurator.attach(...)`, then `.show()`.
 
 Read the hosting Activity file if modifying an existing one. Prefer extracting the configurator rather than dumping Builder + events into `onCreate`.
 
 **IMPORTANT — the generated code must include:**
-- All inline comments from the template explaining what each field/event does.
+- All inline comments from the template explaining what each field/event does — including Application warmup comments.
 - All optional `partnerUserMeta` fields as commented-out lines (phone, pan, deeplink, sdkMetrics, partner_section_name, partner_cta_copy, partner_cta_position, partner_medium, partner_keywords). Partners need to see what's available.
 - `// TODO:` markers on every line the partner must customize (auth token, session ID, partner ID, analytics forwarding, deeplink handling). These appear in Android Studio's TODO tool window.
+- Docs rule: `environment` only on `DezervSDKInitConfig`; config theme/viewType from `DezervPartnerSDKSettings`; auth token for that same environment.
 
 Do not strip comments, optional fields, or TODOs to "clean up" the code.
 
@@ -271,9 +254,10 @@ Key requirements:
    - Find the view: `findViewById<DezervSDKView>(R.id.dezervSDKView)`.
    - `DezervSDKConfigurator.attach(activity, sdkView, viewType, callbacks)` then `.show()`.
 4. In `onDestroy()`, null out the instance.
-5. `partnerAuthToken` must come from the partner backend — use `"PARTNER_AUTH_TOKEN"` as placeholder.
+5. `partnerAuthToken` must come from the partner backend for **the same** environment as `DezervPartnerSDKSettings.environment` — use `"PARTNER_AUTH_TOKEN"` as placeholder.
 6. Read `references/user-meta-fields.md` for required `partnerUserMeta` fields.
-7. Use `DezervViewType.FULL_VIEW` for a dedicated Activity; `TAB_VIEW` for Fragment / tab embedding.
+7. Use `DezervPartnerSDKSettings.viewType` — `FULL_VIEW` for a dedicated Activity; `TAB_VIEW` for Fragment / tab embedding.
+8. **Do not** invent `environment` on `DezervSDKConfig` — docs put it only on `DezervSDKInitConfig`.
 
 ## Step 6b: Wire up the SDK launch
 
@@ -397,7 +381,8 @@ The SDK automatically resizes its WebView when the soft keyboard opens. If you e
 - The Activity hosting `DezervSDKView` **must** extend `FragmentActivity` (or `AppCompatActivity`). If the agent creates a plain `Activity`, `Builder` will crash at runtime.
 - The SDK requires **Android 13 (API 33)+** at runtime. All SDK calls must be gated with `Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU`. Without this check, the app will crash on older devices.
 - Never hardcode real `partnerAuthToken` JWTs or PII (`phone`, `pan`) in source. Use placeholder values in code; fetch real tokens from the partner backend at runtime.
-- The environment in `DezervSDK.initialize()` and the `partnerAuthToken` in `DezervSDKConfig` must target the same environment (both production or both preprod). Mismatched environments cause auth failures or blank screens.
+- The environment in `DezervSDKInitConfig` and the `partnerAuthToken` must **always** be the same (`DezervPartnerSDKSettings.environment`). Theme/viewType must match between InitConfig and `DezervSDKConfig` (docs: Match Themes). Do **not** put `environment` on `DezervSDKConfig`.
+- When patching the Application class, **always** include the warmup comments from the template — never a bare `initialize` call.
 
 ## Run validation
 

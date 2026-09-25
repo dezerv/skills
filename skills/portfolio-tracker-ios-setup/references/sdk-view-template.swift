@@ -1,26 +1,26 @@
 // =============================================================================
 // Reference implementation for the Dezerv Portfolio Tracker SDK — iOS
 // Adapt to the partner's existing project — do not copy verbatim.
+// Source of truth for API shapes: portfolio-tracker-sdk-docs/docs/ios/usage.md
 //
 // Architecture (UI and SDK wiring are separated):
-//   - DezervSDK.shared.initialize() → @main App struct init() ONLY (one-time warmup)
-//   - DezervSDKConfigurator         → config, Builder, event handling (no UI)
-//   - DezervPortfolioHostView       → thin SwiftUI host that presents DezervSDKView
-//   - DezervSDK.shared.logout()     → When the partner user logs out of the host app
-//   - DezervSDK.shared.dispose()    → When the SDK UI is dismissed
+//   - DezervSDK.shared.initialize(environment:) → @main App init ONLY (warmup)
+//   - DezervSDKConfigurator                      → config, Builder, events (no UI)
+//   - DezervPortfolioHostView                    → thin host that presents DezervSDKView
+//   - DezervSDK.shared.logout() / dispose()      → host logout / dismiss
 //
-// The SDK is a SINGLETON (DezervSDK.shared). initialize() must be called
-// exactly ONCE at app start. Builder + DezervSDKView is used each time
-// the SDK UI needs to be presented.
-//
-// How partners present this host (sheet / fullScreenCover / NavigationLink / tab)
-// is decided in SKILL Step 5b — this file does NOT include a launcher button.
+// Docs notes:
+//   - environment is passed ONLY to initialize() — NOT on DezervSDKConfigParms
+//   - theme / viewType on warmup should match DezervSDKConfigParms (best practice)
+//   - partnerAuthToken must be issued for the same environment as initialize()
 // =============================================================================
 
 
 // =============================================================================
 // WARMUP — goes in the @main App struct init(), NOT in a View
-// Add to: the existing init() of the partner's @main struct
+// Docs: ios/usage.md → "Optimization - SDK Warmup" / "Environment Management"
+//
+// IMPORTANT: Copy these comments into the partner's root file. Do not strip them.
 // =============================================================================
 //
 // import PortfolioTrackerSDK
@@ -30,14 +30,24 @@
 //     init() {
 //         // ... existing init code ...
 //
-//         // One-time async warmup — non-blocking, safe at startup.
-//         // Environment: .production or .preprod (.integration is Dezerv-internal only)
-//         // ⚠️ If using .preprod, also use a preprod auth token in DezervSDKConfigParms
-//         //    — the environment in initialize() and the token must match
-//         DezervSDK.shared.initialize(environment: .production)
+//         // Pre-warm SDK during app launch (docs: Best Practices → Early Warmup).
+//         // Asynchronous / non-blocking — safe at startup.
+//         //
+//         // environment is ESSENTIAL for warmup pre-load (docs).
+//         // Pass it only here on initialize() — NOT on DezervSDKConfigParms.
+//         // Allowed: .production or .preprod (.integration is Dezerv-internal only).
+//         // If omitted, SDK defaults to .production.
+//         //
+//         // ⚠️ ALWAYS THE SAME:
+//         //   1. environment below
+//         //   2. partnerAuthToken issued for that same environment
+//         //   3. theme / viewType here must match DezervSDKConfigParms later
+//         DezervSDK.shared.initialize(
+//             environment: DezervPartnerSDKSettings.environment  // .production or .preprod
+//         )
 //
-//         // Optional: with completion handler for logging/metrics
-//         // DezervSDK.shared.initialize(environment: .production) { result in
+//         // Optional: with completion handler for logging/metrics (docs)
+//         // DezervSDK.shared.initialize(environment: DezervPartnerSDKSettings.environment) { result in
 //         //     DispatchQueue.main.async {
 //         //         switch result {
 //         //         case .success: print("Warmup successful")
@@ -54,8 +64,26 @@ import SwiftUI
 import PortfolioTrackerSDK
 
 // =============================================================================
+// SHARED SETTINGS — keep warmup (initialize) and display (Builder) aligned
+// Docs: environment only on initialize(); theme must match warmup ↔ config
+// =============================================================================
+
+/// Single place to change env / theme / viewType so warmup and display never diverge.
+enum DezervPartnerSDKSettings {
+    /// Passed ONLY to `DezervSDK.shared.initialize(environment:)`.
+    /// Docs: essential for warmup pre-load. partnerAuthToken must target this same env.
+    static let environment: DezervSDKEnvironment = .production // TODO: .production or .preprod
+
+    /// Must match between warmup and `DezervSDKConfigParms.theme` (docs best practice).
+    static let theme: DezervSDKTheme = .light // TODO: .light or .dark
+
+    /// `.fullView` (sheet/push/cover) or `.tabView` (embedded tab). Docs: DezervViewType.
+    static let viewType: DezervViewType = .fullView // TODO: .fullView or .tabView
+}
+
+// =============================================================================
 // FILE 1: DezervSDKConfigurator — SDK wiring only (no SwiftUI)
-// Place in: same module as the host view (e.g. Services/ or Features/Portfolio/)
+// Docs: ios/usage.md → Builder / DezervSDKConfigParms
 // =============================================================================
 
 /// Builds SDK config, attaches the message listener, and owns event handling.
@@ -78,33 +106,26 @@ enum DezervSDKConfigurator {
         var onHostLogout: () -> Void
     }
 
-    // -------------------------------------------------------------------------
-    // Public entry — call from the host view's `.task` / `onAppear`
-    // -------------------------------------------------------------------------
-
     /// Configures `DezervSDK.Builder` and registers the event listener.
     /// On success the host should present `DezervSDKView()`.
     @discardableResult
     static func attach(callbacks: HostCallbacks) -> AttachResult {
-        let authToken = "PARTNER_AUTH_TOKEN" // TODO: Replace with your backend's /auth/token response
+        // Auth token MUST be issued for the same environment passed to initialize()
+        // (DezervPartnerSDKSettings.environment). Docs: environment is set only on warmup.
+        let authToken = "PARTNER_AUTH_TOKEN" // TODO: backend /auth/token for THIS environment
 
+        // Docs struct:
+        //   DezervSDKConfigParms(partnerAuthToken, partnerUserMeta, theme?, viewType?)
+        // Environment is NOT a field here.
         let config = DezervSDKConfigParms(
             partnerAuthToken: authToken,
             partnerUserMeta: buildUserMeta(),
 
-            // Theme — .light or .dark
-            theme: .light,
+            // Theme — must match warmup (docs: Match Themes Between Warmup and Display)
+            theme: DezervPartnerSDKSettings.theme,
 
-            // View type:
-            //   .fullView = full-screen standalone SDK view (default for sheet / push / cover)
-            //   .tabView  = embedded/nested view for tab-based navigation
-            // Match this to how the partner presents DezervPortfolioHostView.
-            viewType: .fullView
-
-            // ⚠️ PREPROD SETUP: If targeting preprod, you must change BOTH:
-            //   1. DezervSDK.shared.initialize() in @main: environment: .preprod
-            //   2. This config: use a preprod-issued partnerAuthToken
-            //   Mismatched environments will cause auth failures or blank screens
+            // View type — .fullView or .tabView (docs)
+            viewType: DezervPartnerSDKSettings.viewType
         )
 
         let result = DezervSDK.Builder()
@@ -127,7 +148,7 @@ enum DezervSDKConfigurator {
 
     // -------------------------------------------------------------------------
     // User metadata — personalization + session + attribution
-    // See references/user-meta-fields.md for the full field table
+    // See references/user-meta-fields.md / docs ios usage.md
     // -------------------------------------------------------------------------
 
     static func buildUserMeta() -> [String: Any] {
@@ -167,7 +188,6 @@ enum DezervSDKConfigurator {
 
     // -------------------------------------------------------------------------
     // Event handler — partner-facing events from docs/ios/events.md
-    // Remaining cases fall through to default (internal/diagnostic events)
     // -------------------------------------------------------------------------
 
     private static func handleSDKEvent(
@@ -178,25 +198,20 @@ enum DezervSDKConfigurator {
         switch event {
 
         case .sdkInitializationSuccess:
-            // SDK WebView is loaded and ready — safe to interact
             print("DezervSDK: initialized successfully")
 
         case .sdkInitializationError:
-            // Config or auth issue — check partnerAuthToken and userMeta
             let error = payload?["error"] as? String ?? "unknown"
             print("DezervSDK: init failed — \(error)")
 
         case .exit:
-            // ACTION REQUIRED: dismiss the SDK host
             if let errorCode = payload?["errorCode"] as? String,
                errorCode == "sdk_error" {
-                // SDK-side error — fetch a fresh auth token and re-configure
                 print("DezervSDK: exit with sdk_error — re-init with new token")
                 DispatchQueue.main.async {
                     callbacks.onReinitialize()
                 }
             } else {
-                // Normal exit — release SDK resources, then dismiss host UI
                 DispatchQueue.main.async {
                     DezervSDK.shared.dispose()
                     callbacks.onDismiss()
@@ -204,58 +219,48 @@ enum DezervSDKConfigurator {
             }
 
         case .logout:
-            // ACTION REQUIRED: user logged out inside the SDK
             DispatchQueue.main.async {
-                DezervSDK.shared.logout()   // Clears SDK session data
-                DezervSDK.shared.dispose()  // Releases SDK resources
-                callbacks.onHostLogout()    // TODO: Also clear your app's own auth session
+                DezervSDK.shared.logout()
+                DezervSDK.shared.dispose()
+                callbacks.onHostLogout()
             }
 
         case .userAuth:
-            // User authenticated — payload has phone, flow, clientId, deviceId
             let phone = payload?["phone"] as? String ?? ""
-            let flow = payload?["flow"] as? String ?? ""    // "signup" or "login"
+            let flow = payload?["flow"] as? String ?? ""
             print("DezervSDK: userAuth flow=\(flow) phone=\(phone)")
 
         case .onDeeplink:
-            // User tapped a deeplink inside the SDK
             if let link = payload?["link"] as? String {
                 print("DezervSDK: deeplink — \(link)")
                 // TODO: Navigate to this deeplink in your app
             }
 
         case .analytics:
-            // Forward to your analytics service
             let eventName = payload?["eventName"] as? String ?? ""
             print("DezervSDK: analytics — \(eventName)")
             // TODO: Forward to your analytics (e.g. Firebase, Mixpanel)
 
         case .themeChange:
-            // SDK theme changed — sync your app's theme if needed
-            let theme = payload?["theme"] as? String ?? ""  // "dark" or "light"
+            let theme = payload?["theme"] as? String ?? ""
             print("DezervSDK: theme changed to \(theme)")
 
         case .dataShare:
-            // SDK is sharing data with the host app — structure varies by use case
             if let sharedData = payload {
                 print("DezervSDK: dataShare — \(sharedData)")
                 // TODO: Process or display shared data in your app
             }
 
         case .error:
-            // Catch-all operational error during SDK runtime
-            // Codes: sdk_error | network_error | unknown_error
             let message = payload?["message"] as? String
             let code = payload?["code"] as? String
             let error = payload?["error"] as? String ?? "unknown"
             print("DezervSDK: error — message=\(message ?? "") code=\(code ?? "") error=\(error)")
 
         case .unknown:
-            // WebView sent an unrecognized event type — log for diagnostics
             print("DezervSDK: unknown event payload — \(payload ?? [:])")
 
         default:
-            // Internal/diagnostic events (sdkData, interceptParentScroll, OTP, etc.)
             print("DezervSDK: \(event) — \(payload ?? [:])")
         }
     }
@@ -264,12 +269,9 @@ enum DezervSDKConfigurator {
 
 // =============================================================================
 // FILE 2: DezervPortfolioHostView — thin UI host only
-// Create as: a new SwiftUI View file in the partner's Views/ directory
-// Presents DezervSDKView after DezervSDKConfigurator.attach succeeds.
-// No launcher button — the parent decides sheet / push / tab / cover.
+// No launcher button — parent decides sheet / push / tab / cover (SKILL Step 5b)
 // =============================================================================
 
-/// Presentation phases for the thin SDK host.
 enum DezervPortfolioHostPhase: Equatable {
     case loading
     case ready
@@ -288,8 +290,7 @@ struct DezervPortfolioHostView: View {
                 ProgressView("Configuring SDK...")
 
             case .ready:
-                // DezervSDKView renders the SDK WebView
-                // Pass theme to override: DezervSDKView(theme: .dark)
+                // Docs: DezervSDKView() — optional theme override: DezervSDKView(theme: .dark)
                 DezervSDKView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -304,18 +305,12 @@ struct DezervPortfolioHostView: View {
         }
     }
 
-    /// Wires Builder via the configurator, then flips phase for UI only.
     private func attachSDK() {
         phase = .loading
 
         let callbacks = DezervSDKConfigurator.HostCallbacks(
-            onDismiss: {
-                dismiss()
-            },
-            onReinitialize: {
-                // Fetch a fresh partnerAuthToken, then attach again
-                attachSDK()
-            },
+            onDismiss: { dismiss() },
+            onReinitialize: { attachSDK() },
             onHostLogout: {
                 // TODO: Clear your app's own auth session
                 dismiss()
@@ -334,18 +329,11 @@ struct DezervPortfolioHostView: View {
 
 
 // =============================================================================
-// LOGOUT HANDLER
-// Call this when the partner user logs out of the host app.
-// Place in: wherever your app handles user logout (e.g. settings, auth manager)
+// LOGOUT HANDLER — docs: ios/usage.md logout section
 // =============================================================================
 //
 // func handleUserLogout() {
-//     // 1. Logout from Dezerv SDK — clears user session data
 //     DezervSDK.shared.logout()
-//
-//     // 2. Dispose SDK resources
 //     DezervSDK.shared.dispose()
-//
-//     // 3. Clear your app's own user session
 //     // TODO: yourAppAuthService.clearSession()
 // }

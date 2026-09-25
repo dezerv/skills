@@ -29,6 +29,25 @@ import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKInitConfig
 import `in`.dezerv.portfolio_tracker_sdk.core.DezervSDKTheme
 import `in`.dezerv.portfolio_tracker_sdk.core.DezervViewType
 
+/**
+ * Partner-wide SDK settings — keep warmup (InitConfig) and display (DezervSDKConfig) aligned.
+ * Docs: android/usage.md → Environment on InitConfig only; match themes warmup ↔ config.
+ */
+object DezervPartnerSDKSettings {
+    /**
+     * Passed ONLY to [DezervSDKInitConfig.environment] during [DezervSDK.initialize].
+     * Docs: essential for warmup pre-load. partnerAuthToken must target this same env.
+     * PRODUCTION or PREPROD (INTEGRATION is Dezerv-internal only).
+     */
+    val environment: DezervSDKEnvironment = DezervSDKEnvironment.PRODUCTION // TODO: PRODUCTION or PREPROD
+
+    /** Must match between InitConfig and DezervSDKConfig (docs: Match Themes). */
+    val theme: DezervSDKTheme = DezervSDKTheme.light // TODO: light or dark
+
+    /** FULL_VIEW (Activity) or TAB_VIEW (Fragment/tab). */
+    val viewType: DezervViewType = DezervViewType.FULL_VIEW // TODO: FULL_VIEW or TAB_VIEW
+}
+
 class MyApplication : Application() {
     override fun onCreate() {
         super.onCreate()
@@ -36,27 +55,24 @@ class MyApplication : Application() {
         // SDK requires Android 13 (API 33) or higher
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
 
-            // Initialize the SDK ONCE at app startup for warmup/pre-loading.
-            // This is async and non-blocking — safe to call in onCreate().
-            // Match theme and viewType with what you'll use in DezervSDKConfig later.
+            // Pre-warm SDK during app launch (docs: Best Practices → Early Warmup).
+            // Asynchronous / non-blocking — safe at startup.
+            //
+            // environment is ESSENTIAL for warmup pre-load (docs).
+            // Pass it only on DezervSDKInitConfig — NOT on DezervSDKConfig.
+            // If omitted, SDK defaults to PRODUCTION.
+            //
+            // ⚠️ ALWAYS THE SAME:
+            //   1. environment below
+            //   2. partnerAuthToken issued for that same environment
+            //   3. theme / viewType here must match DezervSDKConfig later
             DezervSDK.initialize(
                 context = this,
                 dezervSDKInitConfig = DezervSDKInitConfig(
-                    // Theme must match the theme used in DezervSDKConfig for optimal perf
-                    theme = DezervSDKTheme.light,
-
-                    // FULL_VIEW = full-screen SDK view (default for a dedicated Activity)
-                    // TAB_VIEW  = embedded/nested SDK view (for tab-based or fragment navigation)
-                    viewType = DezervViewType.FULL_VIEW,
-
-                    // Enable debug logging during development
+                    theme = DezervPartnerSDKSettings.theme,
+                    viewType = DezervPartnerSDKSettings.viewType,
                     isDebug = BuildConfig.DEBUG,
-
-                    // PRODUCTION or PREPROD — essential for warmup pre-load URL
-                    // If omitted, defaults to PRODUCTION
-                    // ⚠️ If using PREPROD, also pass PREPROD in DezervSDKConfig
-                    //    and use a preprod auth token — they must all match
-                    environment = DezervSDKEnvironment.PRODUCTION
+                    environment = DezervPartnerSDKSettings.environment // PRODUCTION or PREPROD
                 )
             )
         }
@@ -113,28 +129,24 @@ object DezervSDKConfigurator {
         viewType: DezervViewType = DezervViewType.FULL_VIEW,
         callbacks: HostCallbacks
     ): DezervSDK {
-        // Auth token — MUST come from the partner backend, never hardcoded
-        val authToken = "PARTNER_AUTH_TOKEN" // TODO: Replace with your backend's /auth/token response
+        // Auth token MUST be issued for DezervPartnerSDKSettings.environment
+        // (same value passed to DezervSDKInitConfig during Application warmup).
+        // Docs: environment lives only on InitConfig — not on DezervSDKConfig.
+        val authToken = "PARTNER_AUTH_TOKEN" // TODO: backend /auth/token for THIS environment
 
+        // Docs: DezervSDKConfig(partnerAuthToken, partnerUserMeta, theme, viewType, isDebug)
         val config = DezervSDKConfig(
             partnerAuthToken = authToken,
             partnerUserMeta = buildUserMeta(),
 
-            // Theme — must match the theme used in DezervSDK.initialize() for best perf
-            theme = DezervSDKTheme.light,                   // or DezervSDKTheme.dark
+            // Theme — must match warmup InitConfig (docs: Match Themes Between Warmup and Display)
+            theme = DezervPartnerSDKSettings.theme,
 
-            // View type:
-            //   FULL_VIEW = full-screen standalone SDK view (default for Activity)
-            //   TAB_VIEW  = embedded/nested view for tab-based or fragment navigation
+            // View type — FULL_VIEW or TAB_VIEW (docs)
             viewType = viewType,
 
-            // Debug logging — use BuildConfig.DEBUG so it's auto-disabled in release
+            // Debug logging — use BuildConfig.DEBUG (docs best practice)
             isDebug = BuildConfig.DEBUG
-
-            // ⚠️ PREPROD SETUP: If targeting preprod, you must change BOTH:
-            //   1. DezervSDK.initialize() in Application: environment = DezervSDKEnvironment.PREPROD
-            //   2. This config: use a preprod-issued partnerAuthToken
-            //   Mismatched environments will cause auth failures or blank screens
         )
 
         return DezervSDK.Builder(activity)                  // Must pass FragmentActivity
@@ -336,7 +348,7 @@ class PortfolioActivity : AppCompatActivity() {
         dezervSDKInstance = DezervSDKConfigurator.attach(
             activity = this,
             sdkView = dezervSDKView,
-            viewType = DezervViewType.FULL_VIEW,
+            viewType = DezervPartnerSDKSettings.viewType,
             callbacks = callbacks
         )
 
